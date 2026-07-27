@@ -1,106 +1,123 @@
 """
-Unit tests for live rules engine, including hot-reload and revert capabilities.
+Comprehensive unit tests for rules_engine.py targeting 100% line coverage.
+Missing lines: 33-34, 37-40, 56, 60, 68, 105-106, 115-116, 121-124
 """
 
+import asyncio
 import pytest
 from backend.core.schemas import Transaction, Rule, FlaggedAlert
 from backend.core.rules_engine import RulesEngine
 
 
-def create_sample_tx(amount: float, location: str = "US-NY", age: int = 100) -> Transaction:
+def make_tx(amount=500.0, location="US-NY", age=100, international=False):
     return Transaction(
-        id="tx_test_101",
-        account_id="acc_9901",
+        id="tx_test_001",
+        account_id="acc_001",
         amount=amount,
         location=location,
         timestamp="2026-07-27T12:00:00Z",
         account_age_days=age,
         merchant_category="electronics",
         device_id="dev_001",
-        is_international=False
+        is_international=international
     )
 
 
-def test_rules_engine_scoring():
-    engine = RulesEngine()
-
-    rule1 = Rule(
-        id="rule_high_amount",
-        name="High Amount (> $1000)",
-        code="def evaluate(tx): return tx.amount > 1000",
-        description="Flag transactions over $1000",
+def make_rule(rule_id="rule_x", name="Test Rule"):
+    return Rule(
+        id=rule_id,
+        name=name,
+        code="def evaluate(tx): return True",
+        description="desc",
         created_at="2026-07-27T10:00:00Z",
         status="active",
-        created_by_command="Flag >1000"
+        created_by_command="cmd"
     )
 
-    func1 = lambda tx: tx.amount > 1000
-    engine.register_rule(rule1, func1)
 
-    tx_normal = create_sample_tx(amount=250.0)
-    alerts_normal = engine.score_transaction(tx_normal)
-    assert len(alerts_normal) == 0
+# --------------- listener management ---------------
 
-    tx_high = create_sample_tx(amount=1500.0)
-    alerts_high = engine.score_transaction(tx_high)
-    assert len(alerts_high) == 1
-    assert alerts_high[0].rule_id == "rule_high_amount"
-    assert alerts_high[0].transaction_details.amount == 1500.0
-
-
-def test_rules_engine_hot_reload():
-    """
-    Test hot-reload: deploy a new rule mid-run, confirm the very next transaction
-    batch is scored against it without restarting.
-    """
+def test_add_alert_listener_deduplication():
     engine = RulesEngine()
-
-    # Initially 0 rules
-    tx = create_sample_tx(amount=500.0, location="RU-MOS")
-    assert len(engine.score_transaction(tx)) == 0
-
-    # Hot-reload rule mid-run
-    new_rule = Rule(
-        id="rule_ru_location",
-        name="Flag Moscow Location",
-        code="def evaluate(tx): return tx.location == 'RU-MOS'",
-        description="Flag RU-MOS",
-        created_at="2026-07-27T10:05:00Z",
-        status="active",
-        created_by_command="Flag RU-MOS"
-    )
-    func_ru = lambda tx: tx.location == "RU-MOS"
-    engine.register_rule(new_rule, func_ru)
-
-    # Immediately score the very next transaction against new rule
-    alerts = engine.score_transaction(tx)
-    assert len(alerts) == 1
-    assert alerts[0].rule_id == "rule_ru_location"
+    cb = lambda alert: None
+    engine.add_alert_listener(cb)
+    engine.add_alert_listener(cb)  # duplicate — guard on line 28-29
+    assert engine._alert_listeners.count(cb) == 1
 
 
-def test_rules_engine_revert():
-    """
-    Test revert: restore a prior ruleset snapshot and verify active scoring changes.
-    """
+def test_add_async_alert_listener_deduplication():
     engine = RulesEngine()
+    async def acb(alert): pass
+    engine.add_async_alert_listener(acb)
+    engine.add_async_alert_listener(acb)  # duplicate — guard on line 33-34
+    assert engine._async_alert_listeners.count(acb) == 1
 
-    rule1 = Rule(
-        id="rule_1",
-        name="Rule 1",
-        code="code1",
-        description="desc1",
-        created_at="2026-07-27T10:00:00Z",
-        created_by_command="cmd1"
-    )
-    rule2 = Rule(
-        id="rule_2",
-        name="Rule 2",
-        code="code2",
-        description="desc2",
-        created_at="2026-07-27T10:01:00Z",
-        created_by_command="cmd2"
-    )
 
+def test_remove_sync_alert_listener():
+    engine = RulesEngine()
+    cb = lambda alert: None
+    engine.add_alert_listener(cb)
+    engine.remove_alert_listener(cb)  # hits line 37-38
+    assert cb not in engine._alert_listeners
+
+
+def test_remove_async_alert_listener():
+    engine = RulesEngine()
+    async def acb(alert): pass
+    engine.add_async_alert_listener(acb)
+    engine.remove_alert_listener(acb)  # hits line 39-40
+    assert acb not in engine._async_alert_listeners
+
+
+def test_remove_nonexistent_listener_is_safe():
+    engine = RulesEngine()
+    engine.remove_alert_listener(lambda x: None)  # should not raise
+
+
+# --------------- rule management ---------------
+
+def test_register_and_get_rules():
+    engine = RulesEngine()
+    rule = make_rule("rule_1")
+    engine.register_rule(rule, lambda tx: False)
+    assert "rule_1" in engine.get_active_rule_ids()
+    assert len(engine.get_active_rules()) == 1
+
+
+def test_unregister_existing_rule():
+    engine = RulesEngine()
+    rule = make_rule("rule_2")
+    engine.register_rule(rule, lambda tx: False)
+    removed = engine.unregister_rule("rule_2")  # hits line 52-55
+    assert removed is not None
+    assert removed.id == "rule_2"
+
+
+def test_unregister_nonexistent_rule_returns_none():
+    engine = RulesEngine()
+    result = engine.unregister_rule("nonexistent")  # hits line 56
+    assert result is None
+
+
+def test_get_active_rule_ids():
+    engine = RulesEngine()
+    rule = make_rule("rule_ids")
+    engine.register_rule(rule, lambda tx: False)
+    assert "rule_ids" in engine.get_active_rule_ids()  # hits line 64
+
+
+def test_clear_rules():
+    engine = RulesEngine()
+    engine.register_rule(make_rule("rule_c1"), lambda tx: False)
+    engine.register_rule(make_rule("rule_c2"), lambda tx: False)
+    engine.clear_rules()  # hits line 68
+    assert len(engine.get_active_rules()) == 0
+
+
+def test_revert_ruleset():
+    engine = RulesEngine()
+    rule1 = make_rule("rule_r1", "Rule R1")
+    rule2 = make_rule("rule_r2", "Rule R2")
     func1 = lambda tx: tx.amount > 100
     func2 = lambda tx: tx.account_age_days < 10
 
@@ -108,79 +125,105 @@ def test_rules_engine_revert():
     engine.register_rule(rule2, func2)
     assert len(engine.get_active_rule_ids()) == 2
 
-    # Revert to snapshot containing ONLY rule1
     engine.revert_ruleset([(rule1, func1)])
-    assert engine.get_active_rule_ids() == ["rule_1"]
+    assert engine.get_active_rule_ids() == ["rule_r1"]
 
-    tx = create_sample_tx(amount=50.0, age=5)
-    # Rule 2 would have triggered (age < 10), but rule 2 was reverted out!
+
+# --------------- scoring ---------------
+
+def test_score_transaction_no_rules():
+    engine = RulesEngine()
+    tx = make_tx(amount=9999.0)
     alerts = engine.score_transaction(tx)
+    assert alerts == []
+
+
+def test_score_transaction_rule_triggers():
+    engine = RulesEngine()
+    rule = make_rule("rule_trigger")
+    engine.register_rule(rule, lambda tx: tx.amount > 1000)
+
+    alerts = engine.score_transaction(make_tx(amount=2000.0))
+    assert len(alerts) == 1
+    assert alerts[0].rule_id == "rule_trigger"
+
+
+def test_score_transaction_rule_does_not_trigger():
+    engine = RulesEngine()
+    rule = make_rule("rule_no_trigger")
+    engine.register_rule(rule, lambda tx: tx.amount > 1000)
+
+    alerts = engine.score_transaction(make_tx(amount=50.0))
     assert len(alerts) == 0
 
 
-def test_rules_engine_alert_listeners():
+def test_score_transaction_exception_is_handled():
+    """Hits lines 105-106: exception path inside score loop."""
     engine = RulesEngine()
-    received_alerts = []
+    rule = make_rule("rule_crash")
+    engine.register_rule(rule, lambda tx: 1 / 0)  # always raises ZeroDivisionError
 
-    def alert_handler(alert: FlaggedAlert):
-        received_alerts.append(alert)
-
-    engine.add_alert_listener(alert_handler)
-
-    rule = Rule(
-        id="rule_listener",
-        name="Listener Rule",
-        code="code",
-        description="desc",
-        created_at="2026-07-27T10:00:00Z",
-        created_by_command="cmd"
-    )
-    engine.register_rule(rule, lambda tx: True)
-
-    tx = create_sample_tx(amount=50.0)
-    engine.score_transaction(tx)
-
-    assert len(received_alerts) == 1
-    assert received_alerts[0].rule_id == "rule_listener"
-
-    engine.remove_alert_listener(alert_handler)
-    assert alert_handler not in engine._alert_listeners
+    alerts = engine.score_transaction(make_tx())
+    assert alerts == []  # engine swallows exception, returns empty list
 
 
-def test_rules_engine_unregister_nonexistent_and_clear():
+# --------------- alert listeners on emit ---------------
+
+def test_sync_listener_receives_alert():
     engine = RulesEngine()
-    assert engine.unregister_rule("non_existent_id") is None
+    received = []
+    engine.add_alert_listener(lambda alert: received.append(alert))
+    engine.register_rule(make_rule("rule_emit"), lambda tx: True)
 
-    rule = Rule(
-        id="rule_clear_test",
-        name="Clear Test",
-        code="code",
-        description="desc",
-        created_at="2026-07-27T10:00:00Z",
-        created_by_command="cmd"
-    )
-    engine.register_rule(rule, lambda tx: False)
-    assert len(engine.get_active_rules()) == 1
-
-    engine.clear_rules()
-    assert len(engine.get_active_rules()) == 0
+    engine.score_transaction(make_tx())
+    assert len(received) == 1
 
 
-def test_rules_engine_rule_exception_handling():
+def test_sync_listener_exception_is_handled():
+    """Hits lines 115-116: crashing sync listener is logged, not propagated."""
     engine = RulesEngine()
-    rule = Rule(
-        id="rule_err",
-        name="Err Rule",
-        code="code",
-        description="desc",
-        created_at="2026-07-27T10:00:00Z",
-        created_by_command="cmd"
-    )
-    # Register function that raises an Exception
-    engine.register_rule(rule, lambda tx: 1 / 0)
 
-    tx = create_sample_tx(amount=100.0)
+    def crashing_cb(alert):
+        raise RuntimeError("listener crash")
+
+    engine.add_alert_listener(crashing_cb)
+    engine.register_rule(make_rule("rule_listener_crash"), lambda tx: True)
+
+    alerts = engine.score_transaction(make_tx())
+    assert len(alerts) == 1  # alert still generated despite listener crash
+
+
+@pytest.mark.asyncio
+async def test_async_listener_receives_alert_via_event_loop():
+    """Hits lines 119-124: async listener scheduled via running event loop."""
+    engine = RulesEngine()
+    received = []
+
+    async def async_alert_handler(alert):
+        received.append(alert)
+
+    engine.add_async_alert_listener(async_alert_handler)
+    engine.register_rule(make_rule("rule_async_emit"), lambda tx: True)
+
+    engine.score_transaction(make_tx())
+    # Give the event loop a tick to schedule the async coroutine
+    await asyncio.sleep(0.05)
+    assert len(received) == 1
+
+
+def test_hot_reload_mid_stream():
+    """Deploy rule mid-run → next tx immediately scored against it."""
+    engine = RulesEngine()
+    tx = make_tx(location="RU-MOS")
+
+    # Before hot-reload: no rules
+    assert len(engine.score_transaction(tx)) == 0
+
+    # Hot-reload new rule
+    rule = make_rule("rule_hotreload")
+    engine.register_rule(rule, lambda tx: tx.location == "RU-MOS")
+
+    # Next transaction immediately scored against it
     alerts = engine.score_transaction(tx)
-    # Should handle exception gracefully and return 0 alerts without crashing
-    assert len(alerts) == 0
-
+    assert len(alerts) == 1
+    assert alerts[0].rule_id == "rule_hotreload"

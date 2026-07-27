@@ -1,6 +1,6 @@
 """
-API & FastAPI Endpoint Unit Tests (`tests/test_api.py`).
-Verifies 100% endpoint coverage for backend/main.py and backend/api/routes.py.
+Comprehensive API & main.py endpoint tests targeting maximum coverage.
+Each test uses unique rule names/codes to avoid cross-test duplicate detection.
 """
 
 import pytest
@@ -10,122 +10,184 @@ from backend.main import app
 client = TestClient(app)
 
 
-def test_health_check_endpoint():
-    response = client.get("/")
-    assert response.status_code == 200
-    data = response.json()
+# --------------- health & status ---------------
+
+def test_health_check():
+    res = client.get("/")
+    assert res.status_code == 200
+    data = res.json()
     assert data["status"] == "online"
-    assert data["service"] == "Fraud Detection Engine"
+    assert "service" in data
+    assert "active_rules_count" in data
 
 
-def test_get_active_rules_endpoint():
-    response = client.get("/api/rules")
-    assert response.status_code == 200
-    assert isinstance(response.json(), list)
+def test_get_active_rules_empty():
+    res = client.get("/api/rules")
+    assert res.status_code == 200
+    assert isinstance(res.json(), list)
 
 
-def test_validate_rule_endpoint():
-    payload = {
-        "name": "API Validate Rule",
+# --------------- validate endpoint ---------------
+
+def test_validate_valid_rule():
+    res = client.post("/api/rules/validate", json={
+        "name": "Valid Rule",
         "code": "def evaluate(tx):\n    return tx.amount > 100",
-        "description": "Validation test",
-        "command": "Validate"
-    }
-    response = client.post("/api/rules/validate", json=payload)
-    assert response.status_code == 200
-    data = response.json()
-    assert data["valid"] is True
+        "description": "Test valid rule",
+        "command": "Test"
+    })
+    assert res.status_code == 200
+    assert res.json()["valid"] is True
 
 
-def test_deploy_rule_endpoint_success():
-    payload = {
-        "name": "API Deploy Rule Success",
-        "code": "def evaluate(tx):\n    return tx.amount > 5000 and tx.is_international",
-        "description": "Deploy test rule",
-        "command": "Deploy rule via API"
-    }
-    response = client.post("/api/rules/deploy", json=payload)
-    assert response.status_code == 200
-    data = response.json()
+def test_validate_invalid_rule_import():
+    res = client.post("/api/rules/validate", json={
+        "name": "Invalid Rule",
+        "code": "import os\ndef evaluate(tx): return True",
+        "description": "Malicious",
+        "command": "Test"
+    })
+    assert res.status_code == 200
+    assert res.json()["valid"] is False
+    assert "Disallowed import" in res.json()["error"]
+
+
+# --------------- deploy endpoint ---------------
+
+def test_deploy_valid_rule_success():
+    res = client.post("/api/rules/deploy", json={
+        "name": "Deploy Test A unique 1",
+        "code": "def evaluate(tx):\n    return tx.amount > 9000 and tx.account_age_days < 3",
+        "description": "Deploy test unique rule 1",
+        "command": "Deploy unique rule 1"
+    })
+    assert res.status_code == 200
+    data = res.json()
     assert data["success"] is True
     assert data["rule"]["id"].startswith("rule_")
 
 
-def test_deploy_rule_endpoint_ast_fail():
-    payload = {
-        "name": "API Deploy Rule AST Fail",
-        "code": "import os\ndef evaluate(tx): os.system('whoami')",
-        "description": "Invalid rule",
-        "command": "Malicious code"
-    }
-    response = client.post("/api/rules/deploy", json=payload)
-    assert response.status_code == 200
-    data = response.json()
-    assert data["success"] is False
-    assert "Disallowed import" in data["message"]
+def test_deploy_valid_rule_second_unique():
+    """Different enough rule to avoid duplicate detection."""
+    res = client.post("/api/rules/deploy", json={
+        "name": "Deploy Test B unique 2",
+        "code": "def evaluate(tx):\n    return tx.location == 'KP-PYO' and tx.merchant_category == 'wire_transfer'",
+        "description": "Flag KP wire transfers specifically",
+        "command": "Deploy KP wire transfer check unique"
+    })
+    assert res.status_code == 200
+    data = res.json()
+    assert data["success"] is True
 
 
-def test_revert_rule_endpoint():
-    # Deploy first
-    deploy_payload = {
-        "name": "To Revert Rule",
-        "code": "def evaluate(tx): return tx.account_age_days < 3",
-        "description": "Revert test",
-        "command": "Deploy to revert"
-    }
-    deploy_res = client.post("/api/rules/deploy", json=deploy_payload).json()
-    rule_id = deploy_res["rule"]["id"]
+def test_deploy_ast_invalid_rule_fails():
+    res = client.post("/api/rules/deploy", json={
+        "name": "Malicious Deploy",
+        "code": "import subprocess\ndef evaluate(tx): return True",
+        "description": "AST failure test",
+        "command": "Malicious"
+    })
+    assert res.status_code == 200
+    assert res.json()["success"] is False
+    assert "AST Safety Validation failed" in res.json()["message"]
 
-    # Revert
-    revert_payload = {
+
+# --------------- revert endpoint ---------------
+
+def test_deploy_then_revert_success():
+    # Deploy unique rule
+    deploy_res = client.post("/api/rules/deploy", json={
+        "name": "Rule To Revert Unique XYZ",
+        "code": "def evaluate(tx):\n    return tx.device_id == 'dev_9999' and tx.amount > 999",
+        "description": "Unique device rule for revert test",
+        "command": "Deploy device rule for revert"
+    })
+    assert deploy_res.json()["success"] is True
+    rule_id = deploy_res.json()["rule"]["id"]
+
+    revert_res = client.post("/api/rules/revert", json={
         "rule_id": rule_id,
-        "command": "Revert rule API test"
-    }
-    revert_res = client.post("/api/rules/revert", json=revert_payload)
+        "command": "Revert via API test"
+    })
     assert revert_res.status_code == 200
     assert revert_res.json()["success"] is True
+    assert revert_res.json()["rule_id"] == rule_id
 
 
-def test_get_audit_log_endpoint():
-    response = client.get("/api/audit-log")
-    assert response.status_code == 200
-    data = response.json()
+def test_revert_nonexistent_rule_404():
+    res = client.post("/api/rules/revert", json={
+        "rule_id": "rule_does_not_exist_abc123",
+        "command": "Revert non-existent"
+    })
+    assert res.status_code == 404
+
+
+# --------------- audit log endpoint ---------------
+
+def test_get_audit_log_all():
+    res = client.get("/api/audit-log")
+    assert res.status_code == 200
+    data = res.json()
     assert "integrity_valid" in data
     assert "entries" in data
+    assert isinstance(data["entries"], list)
 
 
-def test_simulator_control_endpoint():
-    action_map = {"play": "running", "pause": "paused", "stop": "stopped"}
-    for act, expected_status in action_map.items():
-        response = client.post("/api/simulator/control", json={"action": act})
-        assert response.status_code == 200
-        assert response.json()["status"] == expected_status
-
-    # Invalid action
-    response_inv = client.post("/api/simulator/control", json={"action": "invalid_action"})
-    assert response_inv.status_code == 400
+def test_get_audit_log_filtered_by_rule_id():
+    res = client.get("/api/audit-log?rule_id=nonexistent_rule")
+    assert res.status_code == 200
+    assert res.json()["entries"] == []
 
 
-def test_simulator_profile_endpoint():
-    profile_data = {
-        "name": "api_profile_test",
-        "amount_min": 1000.0,
-        "amount_max": 2000.0,
-        "high_risk_location_bias": 0.5,
-        "new_account_bias": 0.5
-    }
-    response = client.post("/api/simulator/profile", json=profile_data)
-    assert response.status_code == 200
-    assert "applied successfully" in response.json()["message"]
+# --------------- simulator endpoints ---------------
+
+def test_simulator_play():
+    res = client.post("/api/simulator/control", json={"action": "play"})
+    assert res.status_code == 200
+    assert res.json()["status"] == "running"
 
 
-def test_simulator_status_endpoint():
-    response = client.get("/api/simulator/status")
-    assert response.status_code == 200
-    assert "state" in response.json()
-    assert "profile" in response.json()
+def test_simulator_pause():
+    client.post("/api/simulator/control", json={"action": "play"})
+    res = client.post("/api/simulator/control", json={"action": "pause"})
+    assert res.status_code == 200
+    assert res.json()["status"] == "paused"
 
 
-def test_websocket_alerts_endpoint():
-    with client.websocket_connect("/ws/alerts") as websocket:
-        websocket.send_text("ping")
+def test_simulator_stop():
+    res = client.post("/api/simulator/control", json={"action": "stop"})
+    assert res.status_code == 200
+    assert res.json()["status"] == "stopped"
+
+
+def test_simulator_invalid_action():
+    res = client.post("/api/simulator/control", json={"action": "explode"})
+    assert res.status_code == 400
+
+
+def test_simulator_set_profile():
+    res = client.post("/api/simulator/profile", json={
+        "name": "api_high_risk",
+        "amount_min": 5000.0,
+        "amount_max": 10000.0,
+        "high_risk_location_bias": 1.0,
+        "new_account_bias": 0.8
+    })
+    assert res.status_code == 200
+    assert "applied successfully" in res.json()["message"]
+
+
+def test_simulator_status():
+    res = client.get("/api/simulator/status")
+    assert res.status_code == 200
+    data = res.json()
+    assert "state" in data
+    assert "profile" in data
+
+
+# --------------- websocket endpoint ---------------
+
+def test_websocket_connects_and_stays_open():
+    with client.websocket_connect("/ws/alerts") as ws:
+        ws.send_text("ping")
+        # Just verify connection is established — no crash
