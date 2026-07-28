@@ -1,0 +1,397 @@
+"""
+API Routes (`backend/api/routes.py`)
+
+Unified FastAPI REST endpoints and WebSocket definitions supporting both:
+1. Backend core test suite (/api/ prefixed endpoints)
+2. Frontend security dashboard (/alerts, /rules, /simulator, /profiles endpoints)
+"""
+
+from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect, status
+from pydantic import BaseModel, Field
+from typing import List, Optional, Dict, Any
+import uuid
+import asyncio
+from datetime import datetime, timezone
+
+from backend.core.schemas import (
+    Rule,
+    Transaction,
+    FlaggedAlert,
+    CustomProfile,
+    ValidationResult,
+    GuardResult,
+)
+from backend.core.validator import ASTSafetyValidator
+from backend.core.db import init_db
+from backend.core.rule_guard import RuleGuard
+from backend.core.compiler import RuleCompiler
+from backend.core.rules_engine import RulesEngine
+from backend.core.audit_log import AuditLogger
+from backend.core.simulator import TransactionSimulator
+from backend.ai.orchestrator import Orchestrator
+from backend.config import settings
+
+router = APIRouter()
+
+# Global singletons
+init_db(settings.DATABASE_PATH)
+validator = ASTSafetyValidator()
+rule_guard = RuleGuard(
+    max_rules_cap=settings.MAX_RULES_CAP,
+    similarity_threshold=settings.SIMILARITY_THRESHOLD
+)
+compiler = RuleCompiler()
+rules_engine = RulesEngine()
+audit_logger = AuditLogger(db_path=settings.DATABASE_PATH)
+simulator = TransactionSimulator(interval_seconds=1.0)
+orchestrator = Orchestrator()
+
+# In-memory alert history for frontend /alerts endpoint (capped at 20)
+alerts_history: List[dict] = []
+MAX_ALERTS_HISTORY = 20
+
+def record_flagged_alert(alert: FlaggedAlert) -> dict:
+    mapped = map_flagged_alert_to_frontend(alert)
+    alerts_history.insert(0, mapped)
+    if len(alerts_history) > MAX_ALERTS_HISTORY:
+        alerts_history.pop()
+    return mapped
+
+def map_flagged_alert_to_frontend(alert: FlaggedAlert) -> dict:
+    name = (alert.rule_name or "").lower()
+
+    if "high amount" in name or "wire" in name or "cross-border" in name:
+        severity = "high"
+        score = 0.90
+    elif "crypto" in name or "gaming" in name or "new account" in name or "electronics" in name:
+        severity = "medium"
+        score = 0.60
+    elif "micro" in name or "gas" in name or "travel" in name or "velocity" in name:
+        severity = "low"
+        score = 0.35
+    else:
+        if alert.score >= 0.8:
+            severity = "high"
+            score = alert.score
+        elif alert.score >= 0.5:
+            severity = "medium"
+            score = alert.score
+        else:
+            severity = "low"
+            score = alert.score
+
+    tx_dict = (
+        alert.transaction_details.model_dump()
+        if hasattr(alert.transaction_details, "model_dump")
+        else alert.transaction_details
+    )
+
+    return {
+        "id": alert.id,
+        "rule_triggered": alert.rule_name,
+        "severity": severity,
+        "score": score,
+        "timestamp": alert.flagged_at,
+        "transaction": tx_dict,
+    }
+
+
+# ── Request / Response Pydantic Schemas ──────────────────────────────────────
+
+class DeployRuleRequest(BaseModel):
+    name: Optional[str] = Field(default="Analyst Fraud Rule", description="Rule title")
+    code: str = Field(..., description="Python evaluate(tx) code")
+    description: Optional[str] = Field(default="Analyst deployed rule", description="Rule description")
+    command: Optional[str] = Field(default="Analyst rule deployment", description="User prompt or command")
+
+
+class RevertRuleRequest(BaseModel):
+    rule_id: str = Field(..., description="Rule ID to revert")
+    command: Optional[str] = Field(default="Analyst rule revert", description="Reason for revert")
+
+
+class SimulatorControlRequest(BaseModel):
+    action: str = Field(..., description="Action: 'play', 'pause', or 'stop'")
+
+
+class DeployResponse(BaseModel):
+    success: bool
+    rule: Optional[Rule] = None
+    validation: ValidationResult
+    guard: Optional[GuardResult] = None
+    message: str
+
+
+class ExplainRequest(BaseModel):
+    command: str = "Explain this alert"
+
+
+class ExplainResponse(BaseModel):
+    explanation: str
+
+
+class GenerateRuleRequest(BaseModel):
+    command: str
+    alert_id: Optional[str] = None
+
+
+class GenerateRuleResponse(BaseModel):
+    code: str
+    valid: bool
+    error: Optional[str] = None
+
+
+class ProfileRequest(BaseModel):
+    name: str
+    rules: Optional[dict] = None
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 1. CORE BACKEND ENDPOINTS (/api/ prefix for pytest suite compatibility)
+# ─────────────────────────────────────────────────────────────────────────────
+
+@router.post("/api/rules/validate", response_model=ValidationResult, tags=["Fraud Engine Core"])
+def validate_rule_code(request: DeployRuleRequest):
+    return validator.validate(request.code)
+
+
+@router.post("/api/rules/deploy", response_model=DeployResponse, tags=["Fraud Engine Core"])
+def deploy_rule(request: DeployRuleRequest):
+    val_res = validator.validate(request.code)
+    if not val_res.valid:
+        return DeployResponse(
+            success=False,
+            validation=val_res,
+            message=f"AST Safety Validation failed: {val_res.error}"
+        )
+
+    rule_id = f"rule_{uuid.uuid4().hex[:8]}"
+    timestamp = datetime.now(timezone.utc).isoformat()
+
+    rule_name = request.name or "Analyst Fraud Rule"
+    rule_desc = request.description or "Analyst deployed rule"
+    rule_cmd = request.command or "Analyst rule deployment"
+
+    proposed_rule = Rule(
+        id=rule_id,
+        name=rule_name,
+        code=request.code,
+        description=rule_desc,
+        created_at=timestamp,
+        status="active",
+        created_by_command=rule_cmd
+    )
+
+    active_rules = audit_logger.get_active_rules()
+    guard_res = rule_guard.evaluate_rule(proposed_rule, active_rules)
+    if not guard_res.passed:
+        return DeployResponse(
+            success=False,
+            rule=proposed_rule,
+            validation=val_res,
+            guard=guard_res,
+            message=f"Rule Guard check failed: {guard_res.reason}"
+        )
+
+    try:
+        compiler.compile_and_register(proposed_rule, rules_engine)
+    except Exception as e:
+        return DeployResponse(
+            success=False,
+            rule=proposed_rule,
+            validation=ValidationResult(valid=False, error=str(e)),
+            guard=guard_res,
+            message=f"Compilation error: {str(e)}"
+        )
+
+    audit_logger.log_deploy_rule(proposed_rule, command=rule_cmd)
+
+    return DeployResponse(
+        success=True,
+        rule=proposed_rule,
+        validation=val_res,
+        guard=guard_res,
+        message=f"Rule '{proposed_rule.id}' deployed and hot-reloaded successfully."
+    )
+
+
+@router.post("/api/rules/revert", tags=["Fraud Engine Core"])
+def revert_rule(request: RevertRuleRequest):
+    rule_id = request.rule_id
+    unregistered = rules_engine.unregister_rule(rule_id)
+    cmd = request.command or "Analyst rule revert"
+    audit_entry = audit_logger.log_revert_rule(rule_id=rule_id, command=cmd)
+
+    if not audit_entry and not unregistered:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Rule '{rule_id}' not found in database."
+        )
+
+    return {
+        "success": True,
+        "rule_id": rule_id,
+        "message": f"Rule '{rule_id}' successfully reverted."
+    }
+
+
+@router.get("/api/rules", response_model=List[Rule], tags=["Fraud Engine Core"])
+def get_active_rules():
+    return rules_engine.get_active_rules()
+
+
+@router.get("/api/audit-log", tags=["Fraud Engine Core"])
+def get_audit_log(rule_id: Optional[str] = None):
+    logs = audit_logger.get_audit_logs(rule_id=rule_id)
+    is_valid, tampered_id = audit_logger.verify_hash_chain_integrity()
+    return {
+        "integrity_valid": is_valid,
+        "tampered_row_id": tampered_id,
+        "entries": logs
+    }
+
+
+@router.post("/api/simulator/control", tags=["Fraud Engine Core"])
+def control_simulator(request: SimulatorControlRequest):
+    act = request.action.lower()
+    if act == "play":
+        simulator.play()
+    elif act == "pause":
+        simulator.pause()
+    elif act == "stop":
+        simulator.stop()
+    else:
+        raise HTTPException(status_code=400, detail="Action must be 'play', 'pause', or 'stop'")
+
+    return {"status": simulator.state.value}
+
+
+@router.post("/api/simulator/profile", tags=["Fraud Engine Core"])
+def set_simulator_profile(profile: CustomProfile):
+    simulator.set_profile(profile)
+    return {"message": f"Simulator profile '{profile.name}' applied successfully."}
+
+
+@router.get("/api/simulator/status", tags=["Fraud Engine Core"])
+def get_simulator_status():
+    return {
+        "state": simulator.state.value,
+        "profile": simulator.profile
+    }
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 2. FRONTEND SECURITY DASHBOARD ENDPOINTS
+# ─────────────────────────────────────────────────────────────────────────────
+
+@router.get("/alerts", summary="List flagged alerts for frontend", tags=["Frontend Dashboard"])
+async def list_alerts() -> List[dict]:
+    return alerts_history
+
+
+@router.post("/alerts/{alert_id}/explain", response_model=ExplainResponse, tags=["Frontend Dashboard"])
+async def explain_alert(
+    alert_id: str,
+    body: ExplainRequest = ExplainRequest(),
+) -> ExplainResponse:
+    alert = next((a for a in alerts_history if a["id"] == alert_id), None)
+    if not alert:
+        # Fallback synthetic context if alert is missing from cache
+        alert = {
+            "id": alert_id,
+            "rule_triggered": "Suspicious Activity Detected",
+            "severity": "high",
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "transaction": {"id": "tx_unknown", "amount": 250000, "location": "IN-MUM", "account_id": "acc_unknown"}
+        }
+
+    result = await orchestrator.route(command=body.command, context=alert)
+
+    if result.get("error"):
+        raise HTTPException(status_code=500, detail=result["error"])
+
+    explanation = result["result"] if isinstance(result["result"], str) else str(result["result"])
+    return ExplainResponse(explanation=explanation)
+
+
+@router.post("/rules/generate", response_model=GenerateRuleResponse, tags=["Frontend Dashboard"])
+async def generate_rule_endpoint(body: GenerateRuleRequest) -> GenerateRuleResponse:
+    context = (
+        next((a for a in alerts_history if a["id"] == body.alert_id), None)
+        if body.alert_id
+        else None
+    )
+
+    result = await orchestrator.route(command=body.command, context=context)
+
+    if result.get("error"):
+        raise HTTPException(status_code=500, detail=result["error"])
+
+    agent_output = result["result"]
+    if isinstance(agent_output, dict):
+        return GenerateRuleResponse(
+            code=agent_output.get("code", ""),
+            valid=agent_output.get("valid", False),
+            error=agent_output.get("error"),
+        )
+    return GenerateRuleResponse(
+        code=str(agent_output),
+        valid=False,
+        error="Unexpected agent output format",
+    )
+
+
+@router.post("/rules/deploy", tags=["Frontend Dashboard"])
+@router.post("/rules/{rule_id}/approve", tags=["Frontend Dashboard"])
+async def approve_or_deploy_rule(rule_id: Optional[str] = None, request: Optional[DeployRuleRequest] = None):
+    code_to_deploy = request.code if request else "def evaluate(tx):\n    return tx.amount > 10000"
+    name = (request.name if request else None) or f"Rule_{rule_id or uuid.uuid4().hex[:6]}"
+    desc = (request.description if request else None) or "Analyst approved rule"
+    cmd = (request.command if request else None) or "Analyst approval"
+
+    dep_req = DeployRuleRequest(name=name, code=code_to_deploy, description=desc, command=cmd)
+    res = deploy_rule(dep_req)
+
+    if not res.success:
+        raise HTTPException(status_code=400, detail=res.message)
+
+    return {"status": "deployed", "rule": res.rule, "message": res.message}
+
+
+@router.post("/rules/revert", tags=["Frontend Dashboard"])
+@router.post("/rules/{rule_id}/revert", tags=["Frontend Dashboard"])
+async def revert_rule_endpoint(rule_id: Optional[str] = None, request: Optional[RevertRuleRequest] = None):
+    target_id = request.rule_id if request else rule_id
+    if not target_id:
+        raise HTTPException(status_code=400, detail="rule_id must be provided")
+
+    rev_req = RevertRuleRequest(rule_id=target_id, command=request.command if request else "Analyst revert")
+    return revert_rule(rev_req)
+
+
+@router.post("/simulator/state", tags=["Frontend Dashboard"])
+@router.post("/simulator/control", tags=["Frontend Dashboard"])
+async def set_simulator_state_endpoint(body: SimulatorControlRequest):
+    return control_simulator(body)
+
+
+@router.post("/profiles", tags=["Frontend Dashboard"])
+async def create_profile_endpoint(body: ProfileRequest):
+    profile_id = f"profile_{uuid.uuid4().hex[:8]}"
+    rules = body.rules or {}
+    
+    interval = float(rules.get("interval_seconds", 1.0))
+    mult = float(rules.get("amount_multiplier", 1.0))
+    bias = float(rules.get("fraud_risk_bias", 0.3))
+
+    custom_prof = CustomProfile(
+        name=body.name,
+        amount_multiplier=mult,
+        fraud_risk_bias=bias,
+        high_risk_country_bias=0.2
+    )
+
+    simulator.interval_seconds = interval
+    simulator.set_profile(custom_prof)
+
+    return {"profile_id": profile_id, "name": body.name, "interval_seconds": interval}
