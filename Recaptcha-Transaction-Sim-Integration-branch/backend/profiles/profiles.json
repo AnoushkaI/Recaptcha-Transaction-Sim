@@ -1,0 +1,1215 @@
+{
+  "schema_version": "1.0",
+  "generated_at": "2026-07-29T09:26:01.646181Z",
+  "generated_by": "LocalOllamaProvider",
+  "profiles": [
+    {
+      "profile_id": "REGULAR_CUSTOMER",
+      "display_name": "John Doe",
+      "domain": "example.com",
+      "description": "Regular customer with a stable income and moderate risk tendency.",
+      "risk_tendency": "medium",
+      "identity": {
+        "age_years": {
+          "minimum": 25,
+          "maximum": 40
+        },
+        "occupations": [
+          "Software Engineer",
+          "Graphic Designer"
+        ],
+        "monthly_income_usd": {
+          "minimum": 3000.0,
+          "maximum": 6000.0
+        },
+        "device_types": [
+          "Desktop",
+          "Laptop"
+        ],
+        "browsers": [
+          "Chrome",
+          "Firefox"
+        ],
+        "preferred_payment_methods": [
+          "Credit Card",
+          "Debit Card"
+        ],
+        "typical_login_hour_utc": {
+          "minimum": 12,
+          "maximum": 18
+        }
+      },
+      "behavioral": {
+        "typing_speed_cpm": {
+          "minimum": 50,
+          "maximum": 100
+        },
+        "typing_error_rate": {
+          "minimum": 0.05,
+          "maximum": 0.1
+        },
+        "mouse_movement_quality": {
+          "minimum": 0.8,
+          "maximum": 0.95
+        },
+        "scroll_behavior": {
+          "minimum": 0.6,
+          "maximum": 0.75
+        },
+        "device_reputation": {
+          "minimum": 0.9,
+          "maximum": 1.0
+        },
+        "ip_reputation": {
+          "minimum": 0.85,
+          "maximum": 1.0
+        },
+        "vpn_probability": {
+          "minimum": 0.02,
+          "maximum": 0.05
+        },
+        "tor_probability": {
+          "minimum": 0.01,
+          "maximum": 0.03
+        },
+        "automation_probability": {
+          "minimum": 0.08,
+          "maximum": 0.12
+        }
+      },
+      "transactional": {
+        "transaction_frequency_per_day": {
+          "minimum": 5,
+          "maximum": 10
+        },
+        "average_transaction_amount_usd": {
+          "minimum": 200.0,
+          "maximum": 400.0
+        },
+        "transaction_amount_usd": {
+          "minimum": 100.0,
+          "maximum": 300.0
+        },
+        "account_age_days": {
+          "minimum": 365,
+          "maximum": 730
+        },
+        "previous_transactions": {
+          "minimum": 20,
+          "maximum": 40
+        },
+        "merchant_categories": [
+          "Electronics",
+          "Grocery"
+        ],
+        "known_device_probability": {
+          "minimum": 0.98,
+          "maximum": 1.0
+        },
+        "unfamiliar_recipient_probability": {
+          "minimum": 0.05,
+          "maximum": 0.1
+        },
+        "password_changed_recently_probability": {
+          "minimum": 0.7,
+          "maximum": 0.85
+        },
+        "refund_attempts": {
+          "minimum": 2,
+          "maximum": 4
+        },
+        "counterparties_per_day": {
+          "minimum": 3,
+          "maximum": 6
+        }
+      }
+    },
+    {
+      "profile_id": "GIFT_CARD_FRAUD",
+      "display_name": "Gift Card Fraudster",
+      "domain": "giftcardfraud.com",
+      "description": "A sophisticated fraudster targeting gift card transactions with a focus on automated methods and new devices.",
+      "risk_tendency": "high",
+      "identity": {
+        "age_years": {
+          "minimum": 25,
+          "maximum": 60
+        },
+        "occupations": [
+          "retired",
+          "student"
+        ],
+        "monthly_income_usd": {
+          "minimum": 3000.0,
+          "maximum": 70000.0
+        },
+        "device_types": [
+          "smartphone",
+          "tablet"
+        ],
+        "browsers": [
+          "Chrome",
+          "Firefox"
+        ],
+        "preferred_payment_methods": [
+          "gift card"
+        ],
+        "typical_login_hour_utc": {
+          "minimum": 18,
+          "maximum": 23
+        }
+      },
+      "behavioral": {
+        "typing_speed_cpm": {
+          "minimum": 50,
+          "maximum": 400
+        },
+        "typing_error_rate": {
+          "minimum": 0.05,
+          "maximum": 0.15
+        },
+        "mouse_movement_quality": {
+          "minimum": 0.8,
+          "maximum": 1.0
+        },
+        "scroll_behavior": {
+          "minimum": 0.7,
+          "maximum": 1.0
+        },
+        "device_reputation": {
+          "minimum": 0.2,
+          "maximum": 1.0
+        },
+        "ip_reputation": {
+          "minimum": 0.5,
+          "maximum": 1.0
+        },
+        "vpn_probability": {
+          "minimum": 0.9,
+          "maximum": 1.0
+        },
+        "tor_probability": {
+          "minimum": 0.3,
+          "maximum": 1.0
+        },
+        "automation_probability": {
+          "minimum": 0.8,
+          "maximum": 1.0
+        }
+      },
+      "transactional": {
+        "transaction_frequency_per_day": {
+          "minimum": 5,
+          "maximum": 20
+        },
+        "average_transaction_amount_usd": {
+          "minimum": 50.0,
+          "maximum": 300.0
+        },
+        "transaction_amount_usd": {
+          "minimum": 10.0,
+          "maximum": 400.0
+        },
+        "account_age_days": {
+          "minimum": 365,
+          "maximum": 730
+        },
+        "previous_transactions": {
+          "minimum": 20,
+          "maximum": 1000
+        },
+        "merchant_categories": [
+          "electronics",
+          "clothing"
+        ],
+        "known_device_probability": {
+          "minimum": 0.9,
+          "maximum": 1.0
+        },
+        "unfamiliar_recipient_probability": {
+          "minimum": 0.5,
+          "maximum": 1.0
+        },
+        "password_changed_recently_probability": {
+          "minimum": 0.2,
+          "maximum": 0.8
+        },
+        "refund_attempts": {
+          "minimum": 3,
+          "maximum": 10
+        },
+        "counterparties_per_day": {
+          "minimum": 5,
+          "maximum": 20
+        }
+      }
+    },
+    {
+      "profile_id": "CARD_TESTING",
+      "display_name": "Automated Fraud Simulation Profile",
+      "domain": "test.com",
+      "description": "This profile simulates a high-risk fraud attempt for automated testing.",
+      "risk_tendency": "high",
+      "identity": {
+        "age_years": {
+          "minimum": 30,
+          "maximum": 50
+        },
+        "occupations": [
+          "Software Engineer",
+          "Data Scientist"
+        ],
+        "monthly_income_usd": {
+          "minimum": 75000.0,
+          "maximum": 125000.0
+        },
+        "device_types": [
+          "Laptop",
+          "Tablet"
+        ],
+        "browsers": [
+          "Chrome",
+          "Firefox"
+        ],
+        "preferred_payment_methods": [
+          "Credit Card",
+          "Debit Card"
+        ],
+        "typical_login_hour_utc": {
+          "minimum": 8,
+          "maximum": 17
+        }
+      },
+      "behavioral": {
+        "typing_speed_cpm": {
+          "minimum": 300,
+          "maximum": 500
+        },
+        "typing_error_rate": {
+          "minimum": 0.02,
+          "maximum": 0.04
+        },
+        "mouse_movement_quality": {
+          "minimum": 0.9,
+          "maximum": 1.0
+        },
+        "scroll_behavior": {
+          "minimum": 0.8,
+          "maximum": 1.0
+        },
+        "device_reputation": {
+          "minimum": 0.5,
+          "maximum": 1.0
+        },
+        "ip_reputation": {
+          "minimum": 0.3,
+          "maximum": 1.0
+        },
+        "vpn_probability": {
+          "minimum": 0.9,
+          "maximum": 1.0
+        },
+        "tor_probability": {
+          "minimum": 0.2,
+          "maximum": 0.5
+        },
+        "automation_probability": {
+          "minimum": 0.8,
+          "maximum": 1.0
+        }
+      },
+      "transactional": {
+        "transaction_frequency_per_day": {
+          "minimum": 30,
+          "maximum": 60
+        },
+        "average_transaction_amount_usd": {
+          "minimum": 2500.0,
+          "maximum": 4000.0
+        },
+        "transaction_amount_usd": {
+          "minimum": 1000.0,
+          "maximum": 3000.0
+        },
+        "account_age_days": {
+          "minimum": 900,
+          "maximum": 1800
+        },
+        "previous_transactions": {
+          "minimum": 500,
+          "maximum": 1000
+        },
+        "merchant_categories": [
+          "Electronics",
+          "Grocery"
+        ],
+        "known_device_probability": {
+          "minimum": 0.7,
+          "maximum": 1.0
+        },
+        "unfamiliar_recipient_probability": {
+          "minimum": 0.2,
+          "maximum": 0.5
+        },
+        "password_changed_recently_probability": {
+          "minimum": 0.3,
+          "maximum": 0.6
+        },
+        "refund_attempts": {
+          "minimum": 10,
+          "maximum": 20
+        },
+        "counterparties_per_day": {
+          "minimum": 20,
+          "maximum": 40
+        }
+      }
+    },
+    {
+      "profile_id": "ACCOUNT_TAKEOVER",
+      "display_name": "High-Risk Traveler",
+      "domain": "travel.com",
+      "description": "A high-risk traveler with a history of frequent transactions in unfamiliar countries using new devices and VPNs.",
+      "risk_tendency": "high",
+      "identity": {
+        "age_years": {
+          "minimum": 30,
+          "maximum": 50
+        },
+        "occupations": [
+          "Travel Agent",
+          "Business Traveler"
+        ],
+        "monthly_income_usd": {
+          "minimum": 7500.0,
+          "maximum": 12500.0
+        },
+        "device_types": [
+          "Smartphone",
+          "Tablet"
+        ],
+        "browsers": [
+          "Chrome",
+          "Firefox"
+        ],
+        "preferred_payment_methods": [
+          "Credit Card",
+          "Gift Card"
+        ],
+        "typical_login_hour_utc": {
+          "minimum": 8,
+          "maximum": 17
+        }
+      },
+      "behavioral": {
+        "typing_speed_cpm": {
+          "minimum": 50,
+          "maximum": 600
+        },
+        "typing_error_rate": {
+          "minimum": 0.02,
+          "maximum": 0.04
+        },
+        "mouse_movement_quality": {
+          "minimum": 0.9,
+          "maximum": 1.0
+        },
+        "scroll_behavior": {
+          "minimum": 0.8,
+          "maximum": 1.0
+        },
+        "device_reputation": {
+          "minimum": 0.7,
+          "maximum": 1.0
+        },
+        "ip_reputation": {
+          "minimum": 0.6,
+          "maximum": 1.0
+        },
+        "vpn_probability": {
+          "minimum": 0.95,
+          "maximum": 1.0
+        },
+        "tor_probability": {
+          "minimum": 0.01,
+          "maximum": 0.02
+        },
+        "automation_probability": {
+          "minimum": 0.8,
+          "maximum": 1.0
+        }
+      },
+      "transactional": {
+        "transaction_frequency_per_day": {
+          "minimum": 5,
+          "maximum": 30
+        },
+        "average_transaction_amount_usd": {
+          "minimum": 1000.0,
+          "maximum": 2000.0
+        },
+        "transaction_amount_usd": {
+          "minimum": 500.0,
+          "maximum": 1500.0
+        },
+        "account_age_days": {
+          "minimum": 365,
+          "maximum": 730
+        },
+        "previous_transactions": {
+          "minimum": 100,
+          "maximum": 200
+        },
+        "merchant_categories": [
+          "Travel",
+          "Gift Cards"
+        ],
+        "known_device_probability": {
+          "minimum": 0.9,
+          "maximum": 1.0
+        },
+        "unfamiliar_recipient_probability": {
+          "minimum": 0.85,
+          "maximum": 1.0
+        },
+        "password_changed_recently_probability": {
+          "minimum": 0.7,
+          "maximum": 0.9
+        },
+        "refund_attempts": {
+          "minimum": 2,
+          "maximum": 5
+        },
+        "counterparties_per_day": {
+          "minimum": 3,
+          "maximum": 8
+        }
+      }
+    },
+    {
+      "profile_id": "CREDENTIAL_STUFFING",
+      "display_name": "Credential Stuffing Scammer",
+      "domain": "scammers.com",
+      "description": "A sophisticated fraudster using automated tools to attempt credential stuffing attacks.",
+      "risk_tendency": "high",
+      "identity": {
+        "age_years": {
+          "minimum": 25,
+          "maximum": 40
+        },
+        "occupations": [
+          "Software Developer",
+          "IT Support"
+        ],
+        "monthly_income_usd": {
+          "minimum": 7000.0,
+          "maximum": 12000.0
+        },
+        "device_types": [
+          "Desktop",
+          "Laptop"
+        ],
+        "browsers": [
+          "Chrome",
+          "Firefox"
+        ],
+        "preferred_payment_methods": [
+          "Credit Card"
+        ],
+        "typical_login_hour_utc": {
+          "minimum": 8,
+          "maximum": 17
+        }
+      },
+      "behavioral": {
+        "typing_speed_cpm": {
+          "minimum": 50,
+          "maximum": 200
+        },
+        "typing_error_rate": {
+          "minimum": 0.05,
+          "maximum": 0.1
+        },
+        "mouse_movement_quality": {
+          "minimum": 0.8,
+          "maximum": 1.0
+        },
+        "scroll_behavior": {
+          "minimum": 0.7,
+          "maximum": 1.0
+        },
+        "device_reputation": {
+          "minimum": 0.95,
+          "maximum": 1.0
+        },
+        "ip_reputation": {
+          "minimum": 0.9,
+          "maximum": 1.0
+        },
+        "vpn_probability": {
+          "minimum": 0.8,
+          "maximum": 1.0
+        },
+        "tor_probability": {
+          "minimum": 0.2,
+          "maximum": 1.0
+        },
+        "automation_probability": {
+          "minimum": 0.95,
+          "maximum": 1.0
+        }
+      },
+      "transactional": {
+        "transaction_frequency_per_day": {
+          "minimum": 30,
+          "maximum": 60
+        },
+        "average_transaction_amount_usd": {
+          "minimum": 200.0,
+          "maximum": 400.0
+        },
+        "transaction_amount_usd": {
+          "minimum": 150.0,
+          "maximum": 300.0
+        },
+        "account_age_days": {
+          "minimum": 90,
+          "maximum": 365
+        },
+        "previous_transactions": {
+          "minimum": 200,
+          "maximum": 400
+        },
+        "merchant_categories": [
+          "Online Shopping",
+          "E-commerce"
+        ],
+        "known_device_probability": {
+          "minimum": 0.85,
+          "maximum": 1.0
+        },
+        "unfamiliar_recipient_probability": {
+          "minimum": 0.3,
+          "maximum": 0.7
+        },
+        "password_changed_recently_probability": {
+          "minimum": 0.2,
+          "maximum": 0.4
+        },
+        "refund_attempts": {
+          "minimum": 5,
+          "maximum": 15
+        },
+        "counterparties_per_day": {
+          "minimum": 10,
+          "maximum": 30
+        }
+      }
+    },
+    {
+      "profile_id": "REFUND_FRAUD",
+      "display_name": "Refund Fraudster",
+      "domain": "fraud.com",
+      "description": "A sophisticated fraudster who frequently attempts to claim refunds on legitimate transactions.",
+      "risk_tendency": "medium",
+      "identity": {
+        "age_years": {
+          "minimum": 25,
+          "maximum": 40
+        },
+        "occupations": [
+          "Software Engineer",
+          "Data Scientist"
+        ],
+        "monthly_income_usd": {
+          "minimum": 7000.0,
+          "maximum": 12000.0
+        },
+        "device_types": [
+          "Desktop",
+          "Laptop"
+        ],
+        "browsers": [
+          "Chrome",
+          "Firefox"
+        ],
+        "preferred_payment_methods": [
+          "Credit Card",
+          "Debit Card"
+        ],
+        "typical_login_hour_utc": {
+          "minimum": 8,
+          "maximum": 17
+        }
+      },
+      "behavioral": {
+        "typing_speed_cpm": {
+          "minimum": 50,
+          "maximum": 120
+        },
+        "typing_error_rate": {
+          "minimum": 0.05,
+          "maximum": 0.1
+        },
+        "mouse_movement_quality": {
+          "minimum": 0.9,
+          "maximum": 1.0
+        },
+        "scroll_behavior": {
+          "minimum": 0.8,
+          "maximum": 1.0
+        },
+        "device_reputation": {
+          "minimum": 0.7,
+          "maximum": 1.0
+        },
+        "ip_reputation": {
+          "minimum": 0.6,
+          "maximum": 1.0
+        },
+        "vpn_probability": {
+          "minimum": 0.5,
+          "maximum": 1.0
+        },
+        "tor_probability": {
+          "minimum": 0.2,
+          "maximum": 1.0
+        },
+        "automation_probability": {
+          "minimum": 0.8,
+          "maximum": 1.0
+        }
+      },
+      "transactional": {
+        "transaction_frequency_per_day": {
+          "minimum": 5,
+          "maximum": 10
+        },
+        "average_transaction_amount_usd": {
+          "minimum": 200.0,
+          "maximum": 400.0
+        },
+        "transaction_amount_usd": {
+          "minimum": 100.0,
+          "maximum": 300.0
+        },
+        "account_age_days": {
+          "minimum": 90,
+          "maximum": 365
+        },
+        "previous_transactions": {
+          "minimum": 20,
+          "maximum": 50
+        },
+        "merchant_categories": [
+          "Electronics",
+          "Clothing"
+        ],
+        "known_device_probability": {
+          "minimum": 0.8,
+          "maximum": 1.0
+        },
+        "unfamiliar_recipient_probability": {
+          "minimum": 0.3,
+          "maximum": 1.0
+        },
+        "password_changed_recently_probability": {
+          "minimum": 0.7,
+          "maximum": 1.0
+        },
+        "refund_attempts": {
+          "minimum": 2,
+          "maximum": 5
+        },
+        "counterparties_per_day": {
+          "minimum": 3,
+          "maximum": 8
+        }
+      }
+    },
+    {
+      "profile_id": "SYNTHETIC_IDENTITY_FRAUD",
+      "display_name": "High-Risk Traveler",
+      "domain": "travel.com",
+      "description": "A high-risk traveler with good telemetry, known devices, travel merchants, and medium risk.",
+      "risk_tendency": "medium",
+      "identity": {
+        "age_years": {
+          "minimum": 30,
+          "maximum": 50
+        },
+        "occupations": [
+          "Travel Agent",
+          "Tourist"
+        ],
+        "monthly_income_usd": {
+          "minimum": 10000.0,
+          "maximum": 20000.0
+        },
+        "device_types": [
+          "Smartphone",
+          "Tablet"
+        ],
+        "browsers": [
+          "Chrome",
+          "Firefox"
+        ],
+        "preferred_payment_methods": [
+          "Credit Card",
+          "Travel Rewards Card"
+        ],
+        "typical_login_hour_utc": {
+          "minimum": 18,
+          "maximum": 23
+        }
+      },
+      "behavioral": {
+        "typing_speed_cpm": {
+          "minimum": 50,
+          "maximum": 600
+        },
+        "typing_error_rate": {
+          "minimum": 0.05,
+          "maximum": 0.1
+        },
+        "mouse_movement_quality": {
+          "minimum": 0.9,
+          "maximum": 1.0
+        },
+        "scroll_behavior": {
+          "minimum": 0.8,
+          "maximum": 1.0
+        },
+        "device_reputation": {
+          "minimum": 0.95,
+          "maximum": 1.0
+        },
+        "ip_reputation": {
+          "minimum": 0.9,
+          "maximum": 1.0
+        },
+        "vpn_probability": {
+          "minimum": 0.2,
+          "maximum": 0.8
+        },
+        "tor_probability": {
+          "minimum": 0.01,
+          "maximum": 0.05
+        },
+        "automation_probability": {
+          "minimum": 0.7,
+          "maximum": 1.0
+        }
+      },
+      "transactional": {
+        "transaction_frequency_per_day": {
+          "minimum": 20,
+          "maximum": 30
+        },
+        "average_transaction_amount_usd": {
+          "minimum": 500.0,
+          "maximum": 1000.0
+        },
+        "transaction_amount_usd": {
+          "minimum": 500.0,
+          "maximum": 1000.0
+        },
+        "account_age_days": {
+          "minimum": 365,
+          "maximum": 730
+        },
+        "previous_transactions": {
+          "minimum": 200,
+          "maximum": 400
+        },
+        "merchant_categories": [
+          "Travel",
+          "Hotels"
+        ],
+        "known_device_probability": {
+          "minimum": 0.98,
+          "maximum": 1.0
+        },
+        "unfamiliar_recipient_probability": {
+          "minimum": 0.05,
+          "maximum": 0.1
+        },
+        "password_changed_recently_probability": {
+          "minimum": 0.7,
+          "maximum": 1.0
+        },
+        "refund_attempts": {
+          "minimum": 2,
+          "maximum": 4
+        },
+        "counterparties_per_day": {
+          "minimum": 30,
+          "maximum": 50
+        }
+      }
+    },
+    {
+      "profile_id": "MONEY_MULE_TRANSFER",
+      "display_name": "High-Risk Money Mule",
+      "domain": "money-mule-transfer.com",
+      "description": "A high-risk profile for money mules involved in large-scale transfers.",
+      "risk_tendency": "high",
+      "identity": {
+        "age_years": {
+          "minimum": 25,
+          "maximum": 60
+        },
+        "occupations": [
+          "Banker",
+          "Investor"
+        ],
+        "monthly_income_usd": {
+          "minimum": 10000.0,
+          "maximum": 30000.0
+        },
+        "device_types": [
+          "Laptop",
+          "Tablet"
+        ],
+        "browsers": [
+          "Chrome",
+          "Firefox"
+        ],
+        "preferred_payment_methods": [
+          "Credit Card",
+          "Bank Transfer"
+        ],
+        "typical_login_hour_utc": {
+          "minimum": 18,
+          "maximum": 23
+        }
+      },
+      "behavioral": {
+        "typing_speed_cpm": {
+          "minimum": 400,
+          "maximum": 600
+        },
+        "typing_error_rate": {
+          "minimum": 0.05,
+          "maximum": 0.1
+        },
+        "mouse_movement_quality": {
+          "minimum": 0.8,
+          "maximum": 1.0
+        },
+        "scroll_behavior": {
+          "minimum": 0.7,
+          "maximum": 1.0
+        },
+        "device_reputation": {
+          "minimum": 0.95,
+          "maximum": 1.0
+        },
+        "ip_reputation": {
+          "minimum": 0.9,
+          "maximum": 1.0
+        },
+        "vpn_probability": {
+          "minimum": 0.8,
+          "maximum": 1.0
+        },
+        "tor_probability": {
+          "minimum": 0.6,
+          "maximum": 1.0
+        },
+        "automation_probability": {
+          "minimum": 0.5,
+          "maximum": 1.0
+        }
+      },
+      "transactional": {
+        "transaction_frequency_per_day": {
+          "minimum": 20,
+          "maximum": 30
+        },
+        "average_transaction_amount_usd": {
+          "minimum": 500.0,
+          "maximum": 2000.0
+        },
+        "transaction_amount_usd": {
+          "minimum": 100.0,
+          "maximum": 4000.0
+        },
+        "account_age_days": {
+          "minimum": 365,
+          "maximum": 730
+        },
+        "previous_transactions": {
+          "minimum": 1000,
+          "maximum": 2000
+        },
+        "merchant_categories": [
+          "Travel",
+          "Finance"
+        ],
+        "known_device_probability": {
+          "minimum": 0.9,
+          "maximum": 1.0
+        },
+        "unfamiliar_recipient_probability": {
+          "minimum": 0.8,
+          "maximum": 1.0
+        },
+        "password_changed_recently_probability": {
+          "minimum": 0.7,
+          "maximum": 1.0
+        },
+        "refund_attempts": {
+          "minimum": 50,
+          "maximum": 100
+        },
+        "counterparties_per_day": {
+          "minimum": 20,
+          "maximum": 30
+        }
+      }
+    },
+    {
+      "profile_id": "AUTHORIZED_PUSH_PAYMENT_SCAM",
+      "display_name": "Authorized Push Payment Scam",
+      "domain": "example.com",
+      "description": "A scam where unauthorized individuals use push payment services to transfer money.",
+      "risk_tendency": "medium",
+      "identity": {
+        "age_years": {
+          "minimum": 25,
+          "maximum": 60
+        },
+        "occupations": [
+          "Software Engineer",
+          "Data Scientist"
+        ],
+        "monthly_income_usd": {
+          "minimum": 4000.0,
+          "maximum": 80000.0
+        },
+        "device_types": [
+          "Desktop",
+          "Laptop"
+        ],
+        "browsers": [
+          "Chrome",
+          "Firefox"
+        ],
+        "preferred_payment_methods": [
+          "Credit Card",
+          "Debit Card"
+        ],
+        "typical_login_hour_utc": {
+          "minimum": 12,
+          "maximum": 18
+        }
+      },
+      "behavioral": {
+        "typing_speed_cpm": {
+          "minimum": 50,
+          "maximum": 300
+        },
+        "typing_error_rate": {
+          "minimum": 0.05,
+          "maximum": 0.15
+        },
+        "mouse_movement_quality": {
+          "minimum": 0.9,
+          "maximum": 1.0
+        },
+        "scroll_behavior": {
+          "minimum": 0.8,
+          "maximum": 1.0
+        },
+        "device_reputation": {
+          "minimum": 0.7,
+          "maximum": 1.0
+        },
+        "ip_reputation": {
+          "minimum": 0.6,
+          "maximum": 1.0
+        },
+        "vpn_probability": {
+          "minimum": 0.5,
+          "maximum": 1.0
+        },
+        "tor_probability": {
+          "minimum": 0.2,
+          "maximum": 1.0
+        },
+        "automation_probability": {
+          "minimum": 0.8,
+          "maximum": 1.0
+        }
+      },
+      "transactional": {
+        "transaction_frequency_per_day": {
+          "minimum": 5,
+          "maximum": 30
+        },
+        "average_transaction_amount_usd": {
+          "minimum": 200.0,
+          "maximum": 1000.0
+        },
+        "transaction_amount_usd": {
+          "minimum": 100.0,
+          "maximum": 500.0
+        },
+        "account_age_days": {
+          "minimum": 90,
+          "maximum": 3650
+        },
+        "previous_transactions": {
+          "minimum": 20,
+          "maximum": 1000
+        },
+        "merchant_categories": [
+          "Online Shopping",
+          "Grocery"
+        ],
+        "known_device_probability": {
+          "minimum": 0.8,
+          "maximum": 1.0
+        },
+        "unfamiliar_recipient_probability": {
+          "minimum": 0.3,
+          "maximum": 1.0
+        },
+        "password_changed_recently_probability": {
+          "minimum": 0.7,
+          "maximum": 1.0
+        },
+        "refund_attempts": {
+          "minimum": 2,
+          "maximum": 50
+        },
+        "counterparties_per_day": {
+          "minimum": 3,
+          "maximum": 10
+        }
+      }
+    },
+    {
+      "profile_id": "VPN_HIGH_RISK_TRAVELER",
+      "display_name": "High-Risk Traveler with VPN",
+      "domain": "travelers.com",
+      "description": "A high-risk traveler using a VPN for secure travel and online activities.",
+      "risk_tendency": "medium",
+      "identity": {
+        "age_years": {
+          "minimum": 25,
+          "maximum": 60
+        },
+        "occupations": [
+          "Travel Agent",
+          "Tour Guide"
+        ],
+        "monthly_income_usd": {
+          "minimum": 3000.0,
+          "maximum": 8000.0
+        },
+        "device_types": [
+          "Smartphone",
+          "Tablet"
+        ],
+        "browsers": [
+          "Chrome",
+          "Firefox"
+        ],
+        "preferred_payment_methods": [
+          "Credit Card",
+          "Debit Card"
+        ],
+        "typical_login_hour_utc": {
+          "minimum": 12,
+          "maximum": 18
+        }
+      },
+      "behavioral": {
+        "typing_speed_cpm": {
+          "minimum": 50,
+          "maximum": 100
+        },
+        "typing_error_rate": {
+          "minimum": 0.05,
+          "maximum": 0.1
+        },
+        "mouse_movement_quality": {
+          "minimum": 0.8,
+          "maximum": 1.0
+        },
+        "scroll_behavior": {
+          "minimum": 0.7,
+          "maximum": 1.0
+        },
+        "device_reputation": {
+          "minimum": 0.95,
+          "maximum": 1.0
+        },
+        "ip_reputation": {
+          "minimum": 0.9,
+          "maximum": 1.0
+        },
+        "vpn_probability": {
+          "minimum": 0.8,
+          "maximum": 1.0
+        },
+        "tor_probability": {
+          "minimum": 0.2,
+          "maximum": 0.5
+        },
+        "automation_probability": {
+          "minimum": 0.6,
+          "maximum": 1.0
+        }
+      },
+      "transactional": {
+        "transaction_frequency_per_day": {
+          "minimum": 3,
+          "maximum": 7
+        },
+        "average_transaction_amount_usd": {
+          "minimum": 200.0,
+          "maximum": 500.0
+        },
+        "transaction_amount_usd": {
+          "minimum": 100.0,
+          "maximum": 1000.0
+        },
+        "account_age_days": {
+          "minimum": 365,
+          "maximum": 730
+        },
+        "previous_transactions": {
+          "minimum": 20,
+          "maximum": 50
+        },
+        "merchant_categories": [
+          "Travel Agencies",
+          "Hotels"
+        ],
+        "known_device_probability": {
+          "minimum": 0.9,
+          "maximum": 1.0
+        },
+        "unfamiliar_recipient_probability": {
+          "minimum": 0.3,
+          "maximum": 0.6
+        },
+        "password_changed_recently_probability": {
+          "minimum": 0.5,
+          "maximum": 0.8
+        },
+        "refund_attempts": {
+          "minimum": 2,
+          "maximum": 4
+        },
+        "counterparties_per_day": {
+          "minimum": 10,
+          "maximum": 20
+        }
+      }
+    }
+  ]
+}
