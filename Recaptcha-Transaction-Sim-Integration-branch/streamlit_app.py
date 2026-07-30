@@ -568,6 +568,25 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 
+# ─── Profile Options ─────────────────────────────────────────────────────────
+PROFILE_IDS = [
+    "REGULAR_CUSTOMER",
+    "GIFT_CARD_FRAUD",
+    "CARD_TESTING",
+    "ACCOUNT_TAKEOVER",
+    "CREDENTIAL_STUFFING",
+    "REFUND_FRAUD",
+    "SYNTHETIC_IDENTITY_FRAUD",
+    "MONEY_MULE_TRANSFER",
+    "AUTHORIZED_PUSH_PAYMENT_SCAM",
+    "VPN_HIGH_RISK_TRAVELER",
+]
+
+def simulate_profile(profile_id: str, count: int = 20):
+    data, err = api("POST", "/simulate/profile", json={"profile_id": profile_id, "count": count})
+    return data, err
+
+
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # ─── SIMULATOR CONTROLS BAR ──────────────────────────────────────────────────
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -582,16 +601,48 @@ st.markdown(f"""
     <span class="dot {dot_cls}"></span>
     Simulator: <strong style="color:#e2e8f0;margin-left:4px;">{sim_state}</strong>
   </div>
-  <span style="margin-left:10px;padding:2px 10px;background:rgba(79,122,255,0.1);
-    border:1px solid rgba(79,122,255,0.3);border-radius:12px;font-size:10px;
-    color:#4f7aff;font-family:'JetBrains Mono',monospace;">
-    Profile: {st.session_state.active_profile}
-  </span>
 </div>
 """, unsafe_allow_html=True)
 
-sim_cols = st.columns([1, 1, 1, 0.3, 1, 4])
+sim_cols = st.columns([2.5, 1.2, 1, 1, 1])
+
 with sim_cols[0]:
+    selected_prof = st.selectbox(
+        "Select Active Fraud Profile (Source of Truth):",
+        options=PROFILE_IDS,
+        index=PROFILE_IDS.index(st.session_state.get("selected_profile_id", "ACCOUNT_TAKEOVER"))
+        if st.session_state.get("selected_profile_id") in PROFILE_IDS else 3,
+        key="profile_select_box"
+    )
+    if selected_prof != st.session_state.get("selected_profile_id"):
+        st.session_state.selected_profile_id = selected_prof
+        # Automatically trigger profile batch simulation
+        res, err = simulate_profile(selected_prof, count=20)
+        if not err and res:
+            st.session_state.profile_transactions = res.get("transactions", [])
+            fresh, _ = fetch_alerts()
+            if fresh:
+                st.session_state.alerts = fresh[:MAX_ALERTS]
+            st.toast(f"Generated 20 synthetic transactions for profile: {selected_prof}", icon="🎯")
+            st.rerun()
+
+with sim_cols[1]:
+    st.markdown("<div style='height:28px'></div>", unsafe_allow_html=True)
+    if st.button("🎲 Generate Batch (20)", key="btn_gen_batch", use_container_width=True):
+        prof_to_run = st.session_state.get("selected_profile_id", "ACCOUNT_TAKEOVER")
+        res, err = simulate_profile(prof_to_run, count=20)
+        if err:
+            st.toast(f"Error: {err}", icon="❌")
+        else:
+            st.session_state.profile_transactions = res.get("transactions", [])
+            fresh, _ = fetch_alerts()
+            if fresh:
+                st.session_state.alerts = fresh[:MAX_ALERTS]
+            st.toast(f"Generated 20 synthetic transactions for {prof_to_run}", icon="⚡")
+            st.rerun()
+
+with sim_cols[2]:
+    st.markdown("<div style='height:28px'></div>", unsafe_allow_html=True)
     play_disabled = (sim_state == "running")
     if st.button("▶  Play", disabled=play_disabled, key="btn_play", use_container_width=True):
         _, err = set_simulator_state("play")
@@ -601,7 +652,8 @@ with sim_cols[0]:
             st.session_state.sim_state = "running"
             st.rerun()
 
-with sim_cols[1]:
+with sim_cols[3]:
+    st.markdown("<div style='height:28px'></div>", unsafe_allow_html=True)
     pause_disabled = (sim_state != "running")
     if st.button("⏸  Pause", disabled=pause_disabled, key="btn_pause", use_container_width=True):
         _, err = set_simulator_state("pause")
@@ -611,7 +663,8 @@ with sim_cols[1]:
             st.session_state.sim_state = "paused"
             st.rerun()
 
-with sim_cols[2]:
+with sim_cols[4]:
+    st.markdown("<div style='height:28px'></div>", unsafe_allow_html=True)
     stop_disabled = (sim_state == "stopped")
     if st.button("⏹  Stop", disabled=stop_disabled, key="btn_stop", use_container_width=True):
         _, err = set_simulator_state("stop")
@@ -619,17 +672,6 @@ with sim_cols[2]:
             st.toast(f"Error: {err}", icon="❌")
         else:
             st.session_state.sim_state = "stopped"
-            st.rerun()
-
-with sim_cols[4]:
-    if st.button("↩  Revert to previous", key="btn_revert", use_container_width=True):
-        _, err = revert_rule()
-        if err:
-            st.toast(f"Revert failed: {err}", icon="❌")
-        else:
-            st.session_state.selected_alert = None
-            st.session_state.rule_deployed_count += 1
-            st.toast("Reverted to previous ruleset.", icon="↩")
             st.rerun()
 
 st.markdown('</div>', unsafe_allow_html=True)
@@ -642,11 +684,42 @@ st.markdown("---")
 left_col, right_col = st.columns([1, 1], gap="medium")
 
 alerts = st.session_state.alerts
-sev_order = {"high": 0, "medium": 1, "low": 2}
-sorted_alerts = sorted(alerts, key=lambda a: sev_order.get(a.get("severity", ""), 9))
+profile_txs = st.session_state.get("profile_transactions", [])
 
-high_count   = sum(1 for a in alerts if a.get("severity") == "high")
-med_count    = sum(1 for a in alerts if a.get("severity") == "medium")
+# Combine alerts and profile transactions into a unified list
+feed_items = []
+for alt in alerts:
+    feed_items.append({
+        "id": alt.get("id"),
+        "rule_triggered": alt.get("rule_triggered"),
+        "severity": alt.get("severity", "high"),
+        "timestamp": alt.get("timestamp"),
+        "transaction": alt.get("transaction", {}),
+        "telemetry_risk_score": alt.get("telemetry_risk_score"),
+        "transaction_risk_score": alt.get("transaction_risk_score"),
+        "final_risk_score": alt.get("final_risk_score"),
+        "classification": alt.get("classification"),
+    })
+
+for ptx in profile_txs:
+    if not any(f["transaction"].get("id") == ptx.get("id") for f in feed_items):
+        feed_items.append({
+            "id": ptx.get("id") or ptx.get("transaction_id"),
+            "rule_triggered": ptx.get("title") or "Synthetic Profile Transaction",
+            "severity": "high" if ptx.get("classification") == "HIGH_RISK" else ("medium" if ptx.get("classification") == "SUSPICIOUS" else "low"),
+            "timestamp": ptx.get("timestamp"),
+            "transaction": ptx,
+            "telemetry_risk_score": ptx.get("telemetry_risk_score"),
+            "transaction_risk_score": ptx.get("transaction_risk_score"),
+            "final_risk_score": ptx.get("final_risk_score"),
+            "classification": ptx.get("classification"),
+        })
+
+sev_order = {"high": 0, "medium": 1, "low": 2}
+sorted_items = sorted(feed_items, key=lambda a: sev_order.get(a.get("severity", ""), 9))
+
+high_count = sum(1 for a in sorted_items if a.get("classification") == "HIGH_RISK" or a.get("severity") == "high")
+med_count  = sum(1 for a in sorted_items if a.get("classification") == "SUSPICIOUS" or a.get("severity") == "medium")
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -657,7 +730,7 @@ with left_col:
     with hdr_l:
         st.markdown(
             '<div class="panel-header" style="border-radius:8px 8px 0 0;">🔴&nbsp;Live Security Console'
-            f'<span style="margin-left:auto;font-size:11px;color:#64748b;">{len(alerts)} alert{"s" if len(alerts)!=1 else ""} (cap 20)</span>'
+            f'<span style="margin-left:auto;font-size:11px;color:#64748b;">{len(sorted_items)} item{"s" if len(sorted_items)!=1 else ""}</span>'
             '</div>',
             unsafe_allow_html=True,
         )
@@ -668,45 +741,80 @@ with left_col:
                 st.session_state.alerts = fresh[:MAX_ALERTS]
             st.rerun()
 
-    # Alert list
-    if not sorted_alerts:
+    # Alert / Transaction list
+    if not sorted_items:
         st.markdown("""
         <div style="text-align:center;padding:60px 20px;color:#64748b;">
-          <div style="font-size:40px;margin-bottom:12px;">🛡️</div>
-          <div style="font-size:14px;font-weight:600;color:#94a3b8;">No alerts yet</div>
-          <div style="font-size:11px;margin-top:6px;">Start the simulator to begin generating transactions</div>
+          <div style="font-size:40px;margin-bottom:12px;">&#128737;</div>
+          <div style="font-size:14px;font-weight:600;color:#94a3b8;">No transactions yet</div>
+          <div style="font-size:11px;margin-top:6px;">Select a profile from the dropdown or click Generate Batch</div>
         </div>
         """, unsafe_allow_html=True)
     else:
         selected_id = (st.session_state.selected_alert or {}).get("id", "")
-        for alert in sorted_alerts:
-            aid = alert.get("id", "")
-            txn = alert.get("transaction", {})
-            sev = alert.get("severity", "low")
+        for item in sorted_items[:25]:
+            aid = item.get("id", "")
+            txn = item.get("transaction", {})
+            sev = item.get("severity", "low")
             is_selected = aid == selected_id
 
-            bg = "#131c35" if is_selected else "#111318"
-            border_left = "3px solid #4f7aff" if is_selected else "3px solid transparent"
+            t_risk = item.get("telemetry_risk_score") or txn.get("telemetry_risk_score", 0.5)
+            tx_risk = item.get("transaction_risk_score") or txn.get("transaction_risk_score", 0.5)
+            f_risk = item.get("final_risk_score") or txn.get("final_risk_score", 0.5)
+            cls_name = item.get("classification") or txn.get("classification", "HIGH_RISK" if f_risk >= 0.6 else "SUSPICIOUS" if f_risk >= 0.3 else "SAFE")
+            
+            # High risk visual flagging
+            is_high_risk = cls_name == "HIGH_RISK"
+            border_left = "4px solid #ef4444" if is_high_risk else ("3px solid #4f7aff" if is_selected else "3px solid transparent")
+            bg = "rgba(239, 68, 68, 0.08)" if is_high_risk else ("#131c35" if is_selected else "#111318")
+
+            cls_color = "#ef4444" if is_high_risk else ("#f59e0b" if cls_name == "SUSPICIOUS" else "#22c55e")
+            cls_bg = "rgba(239,68,68,0.15)" if is_high_risk else ("rgba(245,158,11,0.15)" if cls_name == "SUSPICIOUS" else "rgba(34,197,94,0.15)")
+
+            user_display = str(txn.get("user_name") or "Synthetic User")
+            title_display = str(txn.get("title") or item.get("rule_triggered") or "Transaction Scenario")
+            acc_id_display = str(txn.get("account_id") or "—")
+            loc_display = str(txn.get("location") or "—")
+            time_display = fmt_time(item.get("timestamp") or "")
+            amt_display = fmt_inr(txn.get("amount") or 0)
+            description = str(txn.get("description") or f"Transaction performed by {user_display} on account {acc_id_display}.")
 
             st.markdown(f"""
             <div style="
               background:{bg};
               border-bottom:1px solid #1a1f2e;
               border-left:{border_left};
-              padding:10px 14px;
+              padding:12px 14px;
               border-radius:4px;
-              margin-bottom:2px;
+              margin-bottom:6px;
             ">
               <div style="display:flex;align-items:flex-start;justify-content:space-between;">
                 <div style="flex:1;min-width:0;">
-                  <div class="alert-rule">{alert.get("rule_triggered","—")}</div>
-                  <div class="alert-meta">
-                    {txn.get("account_id","—")} · {txn.get("location","—")} · {fmt_time(alert.get("timestamp",""))}
+                  <div style="font-size:14px;font-weight:700;color:#f1f5f9;">{title_display}</div>
+                  <div style="font-size:12px;font-weight:600;color:#38bdf8;margin-top:2px;">
+                    &#128104; {user_display} &bull; <span style="color:#94a3b8;font-family:'JetBrains Mono',monospace;">{acc_id_display}</span> &bull; {loc_display} &bull; {time_display}
+                  </div>
+                  <div style="font-size:11px;color:#cbd5e1;margin-top:4px;line-height:1.4;background:rgba(255,255,255,0.03);padding:6px;border-radius:4px;">
+                    {description}
+                  </div>
+                  <div style="display:flex;gap:6px;margin-top:6px;font-size:11px;flex-wrap:wrap;color:#94a3b8;">
+                    <span style="padding:1px 6px;background:#1e293b;border-radius:3px;border:1px solid rgba(255,255,255,0.1);">
+                      &#128225; Telemetry Risk: <strong style="color:#e2e8f0">{float(t_risk):.2f}</strong>
+                    </span>
+                    <span style="padding:1px 6px;background:#1e293b;border-radius:3px;border:1px solid rgba(255,255,255,0.1);">
+                      &#128179; Tx Risk: <strong style="color:#e2e8f0">{float(tx_risk):.2f}</strong>
+                    </span>
+                    <span style="padding:1px 6px;background:#1e293b;border-radius:3px;border:1px solid rgba(255,255,255,0.1);">
+                      &#127919; Final Risk: <strong style="color:#e2e8f0">{float(f_risk):.2f}</strong>
+                    </span>
                   </div>
                 </div>
                 <div style="text-align:right;flex-shrink:0;margin-left:12px;">
-                  <div class="alert-amount">{fmt_inr(txn.get("amount", 0))}</div>
-                  <div style="margin-top:3px;">{severity_badge(sev)}</div>
+                  <div class="alert-amount">{amt_display}</div>
+                  <div style="margin-top:6px;display:flex;gap:4px;justify-content:flex-end;align-items:center;">
+                    <span style="padding:2px 8px;border-radius:4px;font-size:10px;font-weight:800;color:{cls_color};background:{cls_bg};border:1px solid {cls_color};">{cls_name}</span>
+                    {severity_badge(sev)}
+                  </div>
                 </div>
               </div>
             </div>
@@ -717,7 +825,7 @@ with left_col:
                 key=f"sel_{aid}",
                 use_container_width=True,
             ):
-                st.session_state.selected_alert = alert
+                st.session_state.selected_alert = item
                 st.session_state.chat_messages = []
                 st.session_state.pending_rule = None
                 st.rerun()
@@ -837,6 +945,7 @@ with right_col:
                                 use_container_width=True,
                             ):
                                 rdata, err = deploy_rule(
+                                    # pyrefly: ignore [unexpected-keyword]
                                     name=f"Rule for Alert {selected.get('id','')}",
                                     code=msg.get("code", ""),
                                     description=f"Fraud detection rule via: {msg.get('command','analyst')}",

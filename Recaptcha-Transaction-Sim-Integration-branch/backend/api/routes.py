@@ -30,7 +30,7 @@ from backend.core.audit_log import AuditLogger
 from backend.core.simulator import TransactionSimulator
 from backend.ai.orchestrator import Orchestrator
 from backend.config import settings
-from backend.profiles.library import ProfileLibraryRepository
+from backend.scoring.engine import evaluate_transaction, ScoringResult
 
 router = APIRouter()
 
@@ -46,7 +46,6 @@ rules_engine = RulesEngine()
 audit_logger = AuditLogger(db_path=settings.DATABASE_PATH)
 simulator = TransactionSimulator(interval_seconds=1.0)
 orchestrator = Orchestrator()
-profile_library_repository = ProfileLibraryRepository(settings.PROFILE_LIBRARY_PATH)
 
 # In-memory alert history for frontend /alerts endpoint (capped at 20)
 alerts_history: List[dict] = []
@@ -88,6 +87,15 @@ def map_flagged_alert_to_frontend(alert: FlaggedAlert) -> dict:
         else alert.transaction_details
     )
 
+    # Ensure transaction object includes exact scoring engine outputs
+    if not tx_dict.get("telemetry_risk_score") or not tx_dict.get("classification"):
+        res = evaluate_transaction(tx_dict)
+        tx_dict["telemetry_score"] = res.telemetry_score
+        tx_dict["telemetry_risk_score"] = res.telemetry_risk_score
+        tx_dict["transaction_risk_score"] = res.transaction_risk_score
+        tx_dict["final_risk_score"] = res.final_risk_score
+        tx_dict["classification"] = res.classification
+
     return {
         "id": alert.id,
         "rule_triggered": alert.rule_name,
@@ -95,6 +103,10 @@ def map_flagged_alert_to_frontend(alert: FlaggedAlert) -> dict:
         "score": score,
         "timestamp": alert.flagged_at,
         "transaction": tx_dict,
+        "telemetry_risk_score": tx_dict.get("telemetry_risk_score"),
+        "transaction_risk_score": tx_dict.get("transaction_risk_score"),
+        "final_risk_score": tx_dict.get("final_risk_score"),
+        "classification": tx_dict.get("classification"),
     }
 
 
@@ -399,18 +411,12 @@ async def create_profile_endpoint(body: ProfileRequest):
     return {"profile_id": profile_id, "name": body.name, "interval_seconds": interval}
 
 
-@router.get("/profiles/library", tags=["Profile Library"])
-async def get_profile_library():
-    """Return the complete validated, JSON-backed profile definition library."""
-    return profile_library_repository.load().model_dump(mode="json")
+@router.post("/api/scoring/evaluate", response_model=ScoringResult, tags=["Scoring Engine"])
+@router.post("/scoring/evaluate", response_model=ScoringResult, tags=["Scoring Engine"])
+def evaluate_scoring_endpoint(payload: Dict[str, Any]):
+    """
+    Evaluates raw behavioral & transactional payload using deterministic formulas from formulae.docx.
+    Returns telemetry_risk_score, transaction_risk_score, final_risk_score, and classification.
+    """
+    return evaluate_transaction(payload)
 
-
-@router.post("/profiles/library/regenerate", tags=["Profile Library"])
-async def regenerate_profile_library():
-    """Explicitly replace the library with one strictly validated LLM generation."""
-    library = await profile_library_repository.generate_and_save()
-    return {
-        "message": "Profile library regenerated and validated.",
-        "profile_count": len(library.profiles),
-        "profiles": library.model_dump(mode="json"),
-    }

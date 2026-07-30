@@ -112,29 +112,65 @@ export default function LiveSecurityConsole({ selectedAlert, onAlertSelect, onAl
             <div style={{ fontSize: 10 }}>Waiting for live feed...</div>
           </div>
         ) : (
-          sorted.map(alert => (
-            <div
-              key={alert.id}
-              id={`alert-row-${alert.id}`}
-              className={[
-                'alert-row',
-                selectedAlert?.id === alert.id ? 'selected' : '',
-                newIds.has(alert.id) ? 'new-alert' : '',
-              ].join(' ')}
-              onClick={() => onAlertSelect(alert)}
-            >
-              <div className="alert-row-left">
-                <div className="alert-rule">{alert.rule_triggered}</div>
-                <div className="alert-meta">
-                  {alert.transaction?.account_id} &bull; {alert.transaction?.location} &bull; {formatTime(alert.timestamp)}
+          sorted.map(alert => {
+            const tx = alert.transaction || {};
+            const telemetryRisk = alert.telemetry_risk_score ?? tx.telemetry_risk_score ?? 0.5;
+            const transactionRisk = alert.transaction_risk_score ?? tx.transaction_risk_score ?? 0.5;
+            const finalRisk = alert.final_risk_score ?? tx.final_risk_score ?? 0.5;
+            const classification = alert.classification ?? tx.classification ?? (finalRisk >= 0.6 ? 'HIGH_RISK' : finalRisk >= 0.3 ? 'SUSPICIOUS' : 'SAFE');
+
+            const classColor = classification === 'HIGH_RISK' ? '#EF4444' : classification === 'SUSPICIOUS' ? '#F59E0B' : '#10B981';
+            const classBg = classification === 'HIGH_RISK' ? 'rgba(239, 68, 68, 0.15)' : classification === 'SUSPICIOUS' ? 'rgba(245, 158, 11, 0.15)' : 'rgba(16, 185, 129, 0.15)';
+
+            return (
+              <div
+                key={alert.id}
+                id={`alert-row-${alert.id}`}
+                className={[
+                  'alert-row',
+                  selectedAlert?.id === alert.id ? 'selected' : '',
+                  newIds.has(alert.id) ? 'new-alert' : '',
+                ].join(' ')}
+                onClick={() => onAlertSelect(alert)}
+              >
+                <div className="alert-row-left">
+                  <div className="alert-rule">{alert.rule_triggered}</div>
+                  <div className="alert-meta">
+                    {tx.account_id} &bull; {tx.location} &bull; {formatTime(alert.timestamp)}
+                  </div>
+                  <div className="risk-scores-row" style={{ display: 'flex', gap: '8px', marginTop: '6px', fontSize: '11px', flexWrap: 'wrap' }}>
+                    <span title="Telemetry Risk Score (Step 2)" style={{ padding: '2px 6px', background: 'var(--bg-elevated, #1e293b)', borderRadius: '4px', border: '1px solid rgba(255,255,255,0.1)' }}>
+                      📡 Telemetry Risk: <strong>{Number(telemetryRisk).toFixed(2)}</strong>
+                    </span>
+                    <span title="Transaction Risk Score (Step 3)" style={{ padding: '2px 6px', background: 'var(--bg-elevated, #1e293b)', borderRadius: '4px', border: '1px solid rgba(255,255,255,0.1)' }}>
+                      💳 Tx Risk: <strong>{Number(transactionRisk).toFixed(2)}</strong>
+                    </span>
+                    <span title="Final Risk Score (Step 4)" style={{ padding: '2px 6px', background: 'var(--bg-elevated, #1e293b)', borderRadius: '4px', border: '1px solid rgba(255,255,255,0.1)' }}>
+                      🎯 Final Risk: <strong>{Number(finalRisk).toFixed(2)}</strong>
+                    </span>
+                  </div>
+                </div>
+                <div className="alert-row-right" style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '6px' }}>
+                  <span className="alert-amount">{formatAmount(tx.amount ?? 0)}</span>
+                  <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+                    <span className={`classification-badge ${classification.toLowerCase()}`} style={{
+                      padding: '2px 8px',
+                      borderRadius: '12px',
+                      fontSize: '10px',
+                      fontWeight: 'bold',
+                      color: classColor,
+                      backgroundColor: classBg,
+                      border: `1px solid ${classColor}`,
+                      textTransform: 'uppercase'
+                    }}>
+                      {classification}
+                    </span>
+                    <SeverityBadge severity={alert.severity} />
+                  </div>
                 </div>
               </div>
-              <div className="alert-row-right">
-                <span className="alert-amount">{formatAmount(alert.transaction?.amount ?? 0)}</span>
-                <SeverityBadge severity={alert.severity} />
-              </div>
-            </div>
-          ))
+            );
+          })
         )}
       </div>
     </div>
