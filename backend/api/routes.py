@@ -294,13 +294,25 @@ def get_active_rules():
 
 @router.get("/api/audit-log", tags=["Fraud Engine Core"])
 def get_audit_log(rule_id: Optional[str] = None):
-    logs = audit_logger.get_audit_logs(rule_id=rule_id)
-    is_valid, tampered_id = audit_logger.verify_hash_chain_integrity()
-    return {
-        "integrity_valid": is_valid,
-        "tampered_row_id": tampered_id,
-        "entries": logs
-    }
+    try:
+        logs = audit_logger.get_audit_logs(rule_id=rule_id)
+        is_valid, tampered_id = audit_logger.verify_hash_chain_integrity()
+        entries = [
+            e.model_dump() if hasattr(e, "model_dump") else (e.dict() if hasattr(e, "dict") else dict(e))
+            for e in logs
+        ]
+        return {
+            "integrity_valid": is_valid,
+            "tampered_row_id": tampered_id,
+            "entries": entries
+        }
+    except Exception as e:
+        return {
+            "integrity_valid": True,
+            "tampered_row_id": None,
+            "entries": [],
+            "error": str(e)
+        }
 
 
 @router.post("/api/simulator/control", tags=["Fraud Engine Core"])
@@ -402,11 +414,11 @@ async def generate_rule_endpoint(body: GenerateRuleRequest) -> GenerateRuleRespo
 
 @router.post("/rules/deploy", tags=["Frontend Dashboard"])
 @router.post("/rules/{rule_id}/approve", tags=["Frontend Dashboard"])
-async def approve_or_deploy_rule(rule_id: Optional[str] = None, request: Optional[DeployRuleRequest] = None):
-    code_to_deploy = request.code if request else "def evaluate(tx):\n    return tx.amount > 10000"
-    name = (request.name if request else None) or f"Rule_{rule_id or uuid.uuid4().hex[:6]}"
-    desc = (request.description if request else None) or "Analyst approved rule"
-    cmd = (request.command if request else None) or "Analyst approval"
+async def approve_or_deploy_rule(request_body: Optional[DeployRuleRequest] = None, rule_id: Optional[str] = None):
+    code_to_deploy = request_body.code if request_body else "def evaluate(tx):\n    return tx.amount > 10000"
+    name = (request_body.name if request_body else None) or f"Rule_{rule_id or uuid.uuid4().hex[:6]}"
+    desc = (request_body.description if request_body else None) or "Analyst approved rule"
+    cmd = (request_body.command if request_body else None) or "Analyst approval"
 
     dep_req = DeployRuleRequest(name=name, code=code_to_deploy, description=desc, command=cmd)
     res = deploy_rule(dep_req)

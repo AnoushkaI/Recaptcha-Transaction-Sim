@@ -961,8 +961,7 @@ with right_col:
                                 use_container_width=True,
                             ):
                                 rdata, err = deploy_rule(
-                                    # pyrefly: ignore [unexpected-keyword]
-                                    name=f"Rule for Alert {selected.get('id','')}",
+                                    rule_name=f"Rule for Alert {selected.get('id','')}",
                                     code=msg.get("code", ""),
                                     description=f"Fraud detection rule via: {msg.get('command','analyst')}",
                                     command=msg.get("command", "analyst command"),

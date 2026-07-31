@@ -38,42 +38,67 @@ def _strip_fences(text: str) -> str:
 
 
 def generate_fallback_rule(command: str, context: Optional[dict] = None) -> str:
-    """Generates an AST-valid fallback Python rule for any transaction context."""
+    """Generates an AST-valid fallback Python rule tailored dynamically to the target alert context."""
     cmd_lower = (command or "").lower()
-    txn = (context or {}).get("transaction", {}) or {}
-    amt = float(txn.get("amount", 2000.0))
-    loc = txn.get("location") or "US-NY"
-    cat = txn.get("merchant_category") or "electronics"
+    ctx = context or {}
+    
+    # Handle different context structures: dict with 'transaction', dict with 'transaction_details', or direct dict
+    txn = {}
+    if isinstance(ctx.get("transaction"), dict):
+        txn = ctx["transaction"]
+    elif isinstance(ctx.get("transaction_details"), dict):
+        txn = ctx["transaction_details"]
+    elif isinstance(ctx, dict):
+        txn = ctx
 
-    if "wire" in cmd_lower or "international" in cmd_lower or loc in ["RU-MOS", "BR-SAO", "CN-BEI", "KP-PYO", "IR-THR"]:
+    amt = float(txn.get("amount", 2000.0) or 2000.0)
+    loc = str(txn.get("location") or "US-NY")
+    cat = str(txn.get("merchant_category") or "electronics").lower().replace(" ", "_")
+    rule_title = str(ctx.get("rule_triggered") or ctx.get("title") or "").lower()
+    desc = str(txn.get("description") or "").lower()
+    
+    auto_prob = float(txn.get("automation_probability", 0.0) or 0.0)
+    vpn_prob = float(txn.get("vpn_probability", 0.0) or 0.0)
+    is_intl = bool(txn.get("is_international")) or loc in ["RU-MOS", "BR-SAO", "CN-BEI", "KP-PYO", "IR-THR"] or "cross-border" in desc or "intl" in rule_title
+    acc_age = int(txn.get("account_age_days", 30) or 30)
+
+    # 1. High Automation / Bot / Session Cadence
+    if "automation" in cmd_lower or "vpn" in cmd_lower or "bot" in cmd_lower or auto_prob > 0.4 or vpn_prob > 0.4 or "bot" in rule_title or "cadence" in rule_title:
         return (
             "def evaluate(tx):\n"
-            "    # Rule: Flag international wire transfers or high risk locations\n"
-            "    return tx.is_international or tx.location in ['RU-MOS', 'BR-SAO', 'CN-BEI', 'KP-PYO', 'IR-THR']"
+            "    # Rule: Flag unnatural session cadence & automated form filling\n"
+            "    return tx.automation_probability > 0.5 or tx.vpn_probability > 0.5"
         )
-    elif "crypto" in cmd_lower or "gaming" in cmd_lower or cat in ["crypto", "gift_cards"]:
-        return (
-            "def evaluate(tx):\n"
-            "    # Rule: Flag high-risk merchant category transactions\n"
-            "    return tx.merchant_category in ['crypto', 'gift_cards', 'wire_transfer'] and tx.amount > 500.0"
-        )
-    elif "automation" in cmd_lower or "vpn" in cmd_lower or "bot" in cmd_lower:
-        return (
-            "def evaluate(tx):\n"
-            "    # Rule: Flag high automation & VPN proxy usage\n"
-            "    return tx.automation_probability > 0.6 or tx.vpn_probability > 0.7"
-        )
-    elif "account" in cmd_lower or "new" in cmd_lower:
-        return (
-            "def evaluate(tx):\n"
-            "    # Rule: Flag high amount transactions on new accounts\n"
-            "    return tx.account_age_days < 7 and tx.amount > 500.0"
-        )
-    else:
-        threshold = max(float(amt) * 0.8, 1000.0)
+    # 2. International / High-Risk Location / Cross-Border
+    elif "wire" in cmd_lower or "international" in cmd_lower or is_intl or "location" in rule_title or "country" in rule_title:
         return (
             f"def evaluate(tx):\n"
-            f"    # Rule: Flag transaction amount exceeding threshold\n"
+            f"    # Rule: Flag cross-border activity in {loc} or high-risk locations\n"
+            f"    return tx.is_international or tx.location == '{loc}'"
+        )
+    # 3. High-Risk Merchant Category (Crypto, Gaming, Electronics, Luxury)
+    elif "crypto" in cmd_lower or "gaming" in cmd_lower or "luxury" in rule_title or "electronics" in rule_title or cat in ["crypto", "gift_cards", "electronics", "luxury"]:
+        threshold = max(amt * 0.7, 300.0)
+        return (
+            f"def evaluate(tx):\n"
+            f"    # Rule: Flag high-risk {cat} merchant transactions over threshold\n"
+            f"    return tx.merchant_category == '{cat}' and tx.amount >= {threshold:.1f}"
+        )
+    # 4. New Account / Sudden Activity
+    elif "account" in cmd_lower or "new" in cmd_lower or acc_age < 14 or "new account" in rule_title:
+        target_age = max(acc_age + 5, 14)
+        threshold = max(amt * 0.6, 200.0)
+        return (
+            f"def evaluate(tx):\n"
+            f"    # Rule: Flag rapid spend on new accounts under {target_age} days old\n"
+            f"    return tx.account_age_days < {target_age} and tx.amount >= {threshold:.1f}"
+        )
+    # 5. Default: Dynamic amount threshold calculated specifically for this transaction amount
+    else:
+        threshold = max(amt * 0.8, 100.0)
+        return (
+            f"def evaluate(tx):\n"
+            f"    # Rule: Flag transaction amount exceeding {cat} threshold\n"
             f"    return tx.amount >= {threshold:.1f}"
         )
 
