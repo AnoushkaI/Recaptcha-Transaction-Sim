@@ -140,12 +140,13 @@ class ASTSafetyValidator:
             if isinstance(node, ast.Attribute):
                 if isinstance(node.value, ast.Name) and node.value.id in ["tx", "transaction"]:
                     field_name = node.attr
-                    if field_name not in ALLOWED_TRANSACTION_FIELDS:
+                    if field_name != "get" and field_name not in ALLOWED_TRANSACTION_FIELDS:
                         return ValidationResult(
                             valid=False,
                             error=f"Unknown field '{field_name}' accessed on Transaction schema on line {lineno}",
                             line_number=lineno
                         )
+
 
         # 4. Check AST complexity cap
         node_count = sum(1 for _ in ast.walk(tree))
@@ -212,7 +213,11 @@ class ASTSafetyValidator:
         # Execute against dry-run samples
         for i, sample in enumerate(samples, 1):
             try:
-                res = eval_func(sample)
+                try:
+                    res = eval_func(sample)
+                except AttributeError:
+                    res = eval_func(sample.model_dump())
+
                 if not isinstance(res, (bool, int)):
                     return ValidationResult(
                         valid=False,
@@ -223,5 +228,6 @@ class ASTSafetyValidator:
                     valid=False,
                     error=f"Dry-run runtime error on sample {i}: {type(e).__name__}: {str(e)}"
                 )
+
 
         return ValidationResult(valid=True)

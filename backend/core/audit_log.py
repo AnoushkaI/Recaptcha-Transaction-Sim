@@ -10,9 +10,11 @@ import sqlite3
 import logging
 from datetime import datetime, timezone
 from typing import List, Optional, Tuple
-
 from backend.core.schemas import Rule, AuditLogEntry
-from backend.core.db import get_db_connection, DEFAULT_DB_PATH
+from backend.core.db import get_db_connection, init_db, DEFAULT_DB_PATH
+
+
+
 
 logger = logging.getLogger(__name__)
 
@@ -28,6 +30,7 @@ def compute_entry_hash(prev_hash: str, rule_id: str, timestamp: str, command: st
 class AuditLogger:
     def __init__(self, db_path: str = DEFAULT_DB_PATH):
         self.db_path: str = db_path
+        init_db(self.db_path)
 
     def _get_latest_hash(self, cursor: sqlite3.Cursor) -> str:
         """Fetch hash of most recent audit log entry or genesis hash if empty."""
@@ -41,8 +44,10 @@ class AuditLogger:
         """
         Logs rule deployment to audit_log with hash chaining and updates SQLite rules table.
         """
+        init_db(self.db_path)
         conn = get_db_connection(self.db_path)
         cursor = conn.cursor()
+
         timestamp = datetime.now(timezone.utc).isoformat()
 
         try:
@@ -155,6 +160,7 @@ class AuditLogger:
 
     def get_audit_logs(self, rule_id: Optional[str] = None) -> List[AuditLogEntry]:
         """Fetch audit log history."""
+        init_db(self.db_path)
         conn = get_db_connection(self.db_path)
         cursor = conn.cursor()
 
@@ -182,6 +188,7 @@ class AuditLogger:
 
     def get_active_rules(self) -> List[Rule]:
         """Fetch all currently active rules from SQLite."""
+        init_db(self.db_path)
         conn = get_db_connection(self.db_path)
         cursor = conn.cursor()
 
@@ -207,8 +214,10 @@ class AuditLogger:
         Cryptographic integrity check of the audit log hash chain.
         Returns (True, None) if valid, or (False, tampered_row_id) if chain is broken.
         """
+        init_db(self.db_path)
         conn = get_db_connection(self.db_path)
         cursor = conn.cursor()
+
 
         try:
             cursor.execute("SELECT * FROM audit_log ORDER BY id ASC")

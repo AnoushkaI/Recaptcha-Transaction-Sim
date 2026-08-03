@@ -73,8 +73,8 @@ def generate_fallback_rule(command: str, context: Optional[dict] = None) -> dict
         )
         code = (
             f"# Detect {title_raw} for account {acc_id}\n"
-            f"def detect(transaction: dict) -> bool:\n"
-            f"    return transaction.get('account_age_days', 30) < 90 and (transaction.get('is_international') or transaction.get('location') == '{loc}') and transaction.get('amount', 0) > {threshold:.2f}"
+            f"def evaluate(tx):\n"
+            f"    return tx.account_age_days < 90 and (tx.is_international or tx.location == '{loc}') and tx.amount > {threshold:.2f}"
         )
         return {"code": code, "explanation": explanation}
 
@@ -88,8 +88,8 @@ def generate_fallback_rule(command: str, context: Optional[dict] = None) -> dict
         )
         code = (
             f"# Detect {title_raw} for account {acc_id}\n"
-            f"def detect(transaction: dict) -> bool:\n"
-            f"    return transaction.get('merchant_category') in ['gift_cards', 'digital_goods', '{cat}'] and transaction.get('amount', 0) >= {threshold:.2f}"
+            f"def evaluate(tx):\n"
+            f"    return tx.merchant_category in ['gift_cards', 'digital_goods', '{cat}'] and tx.amount >= {threshold:.2f}"
         )
         return {"code": code, "explanation": explanation}
 
@@ -102,13 +102,13 @@ def generate_fallback_rule(command: str, context: Optional[dict] = None) -> dict
         )
         code = (
             f"# Detect {title_raw} for account {acc_id}\n"
-            f"def detect(transaction: dict) -> bool:\n"
-            f"    return transaction.get('amount', 0) < 50.0 and (transaction.get('is_international') or transaction.get('merchant_category') == 'gas_station')"
+            f"def evaluate(tx):\n"
+            f"    return tx.amount < 50.0 and (tx.is_international or tx.merchant_category == 'gas_station')"
         )
         return {"code": code, "explanation": explanation}
 
-    # 4. New Account / Wire Transfer / High Value Activity
-    if is_intl or "wire" in cmd_lower or "wire" in rule_title or "new account" in rule_title or acc_age <= 14:
+    # 4. New Account / Wire Transfer / High Value Activity / Location Discrepancy
+    if is_intl or "wire" in cmd_lower or "wire" in rule_title or "new account" in rule_title or acc_age <= 14 or "location" in rule_title or "geographic" in rule_title:
         explanation = (
             f"This rule monitors transactions for pattern **{title_raw}**. "
             f"It flags transactions where location matches `{loc}` and amount is >= ₹{amt:,.0f}. "
@@ -116,8 +116,8 @@ def generate_fallback_rule(command: str, context: Optional[dict] = None) -> dict
         )
         code = (
             f"# Detect {title_raw} for account {acc_id}\n"
-            f"def detect(transaction: dict) -> bool:\n"
-            f"    return transaction.get('location') == '{loc}' and transaction.get('amount', 0) >= {amt:.2f}"
+            f"def evaluate(tx):\n"
+            f"    return tx.location == '{loc}' and tx.amount >= {amt:.2f}"
         )
         return {"code": code, "explanation": explanation}
 
@@ -130,10 +130,11 @@ def generate_fallback_rule(command: str, context: Optional[dict] = None) -> dict
     )
     code = (
         f"# Detect {title_raw} for account {acc_id}\n"
-        f"def detect(transaction: dict) -> bool:\n"
-        f"    return transaction.get('amount', 0) >= {threshold:.2f}"
+        f"def evaluate(tx):\n"
+        f"    return tx.amount >= {threshold:.2f}"
     )
     return {"code": code, "explanation": explanation}
+
 
 
 

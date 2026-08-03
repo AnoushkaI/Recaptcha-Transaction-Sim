@@ -6,7 +6,9 @@ Unified FastAPI REST endpoints and WebSocket definitions supporting both:
 2. Frontend security dashboard (/alerts, /rules, /simulator, /profiles endpoints)
 """
 
-from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect, status
+from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect, status, Body
+from fastapi.responses import JSONResponse
+
 from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Any
 import uuid
@@ -230,62 +232,70 @@ def simulate_profile_endpoint(body: dict):
 
 @router.post("/api/rules/deploy", response_model=DeployResponse, tags=["Fraud Engine Core"])
 def deploy_rule(request: DeployRuleRequest):
-    val_res = validator.validate(request.code)
-    if not val_res.valid:
-        return DeployResponse(
-            success=False,
-            validation=val_res,
-            message=f"AST Safety Validation failed: {val_res.error}"
-        )
-
-    rule_id = f"rule_{uuid.uuid4().hex[:8]}"
-    timestamp = datetime.now(timezone.utc).isoformat()
-
-    rule_name = request.name or "Analyst Fraud Rule"
-    rule_desc = request.description or "Analyst deployed rule"
-    rule_cmd = request.command or "Analyst rule deployment"
-
-    proposed_rule = Rule(
-        id=rule_id,
-        name=rule_name,
-        code=request.code,
-        description=rule_desc,
-        created_at=timestamp,
-        status="active",
-        created_by_command=rule_cmd
-    )
-
-    active_rules = audit_logger.get_active_rules()
-    guard_res = rule_guard.evaluate_rule(proposed_rule, active_rules)
-    if not guard_res.passed:
-        return DeployResponse(
-            success=False,
-            rule=proposed_rule,
-            validation=val_res,
-            guard=guard_res,
-            message=f"Rule Guard check failed: {guard_res.reason}"
-        )
-
     try:
-        compiler.compile_and_register(proposed_rule, rules_engine)
-    except Exception as e:
-        return DeployResponse(
-            success=False,
-            rule=proposed_rule,
-            validation=ValidationResult(valid=False, error=str(e)),
-            guard=guard_res,
-            message=f"Compilation error: {str(e)}"
+        val_res = validator.validate(request.code)
+        if not val_res.valid:
+            return DeployResponse(
+                success=False,
+                validation=val_res,
+                message=f"AST Safety Validation failed: {val_res.error}"
+            )
+
+        rule_id = f"rule_{uuid.uuid4().hex[:8]}"
+        timestamp = datetime.now(timezone.utc).isoformat()
+
+        rule_name = request.name or "Analyst Fraud Rule"
+        rule_desc = request.description or "Analyst deployed rule"
+        rule_cmd = request.command or "Analyst rule deployment"
+
+        proposed_rule = Rule(
+            id=rule_id,
+            name=rule_name,
+            code=request.code,
+            description=rule_desc,
+            created_at=timestamp,
+            status="active",
+            created_by_command=rule_cmd
         )
 
-    audit_logger.log_deploy_rule(proposed_rule, command=rule_cmd)
+        active_rules = audit_logger.get_active_rules()
+        guard_res = rule_guard.evaluate_rule(proposed_rule, active_rules)
+        if not guard_res.passed:
+            return DeployResponse(
+                success=False,
+                rule=proposed_rule,
+                validation=val_res,
+                guard=guard_res,
+                message=f"Rule Guard check failed: {guard_res.reason}"
+            )
 
-    return DeployResponse(
-        success=True,
-        rule=proposed_rule,
-        validation=val_res,
-        guard=guard_res,
-        message=f"Rule '{proposed_rule.id}' deployed and hot-reloaded successfully."
-    )
+        try:
+            compiler.compile_and_register(proposed_rule, rules_engine)
+        except Exception as e:
+            return DeployResponse(
+                success=False,
+                rule=proposed_rule,
+                validation=ValidationResult(valid=False, error=str(e)),
+                guard=guard_res,
+                message=f"Compilation error: {str(e)}"
+            )
+
+        audit_logger.log_deploy_rule(proposed_rule, command=rule_cmd)
+
+        return DeployResponse(
+            success=True,
+            rule=proposed_rule,
+            validation=val_res,
+            guard=guard_res,
+            message=f"Rule '{proposed_rule.id}' deployed and hot-reloaded successfully."
+        )
+    except Exception as exc:
+        return DeployResponse(
+            success=False,
+            validation=ValidationResult(valid=False, error=str(exc)),
+            message=f"Deployment error: {str(exc)}"
+        )
+
 
 
 @router.post("/api/rules/revert", tags=["Fraud Engine Core"])
@@ -492,19 +502,26 @@ async def generate_rule_endpoint(body: GenerateRuleRequest) -> GenerateRuleRespo
 
 @router.post("/rules/deploy", tags=["Frontend Dashboard"])
 @router.post("/rules/{rule_id}/approve", tags=["Frontend Dashboard"])
-async def approve_or_deploy_rule(request_body: Optional[DeployRuleRequest] = None, rule_id: Optional[str] = None):
-    code_to_deploy = request_body.code if request_body else "def evaluate(tx):\n    return tx.amount > 10000"
-    name = (request_body.name if request_body else None) or f"Rule_{rule_id or uuid.uuid4().hex[:6]}"
-    desc = (request_body.description if request_body else None) or "Analyst approved rule"
-    cmd = (request_body.command if request_body else None) or "Analyst approval"
+async def approve_or_deploy_rule(request_body: Optional[DeployRuleRequest] = Body(None), rule_id: Optional[str] = None):
+    if not request_body:
+        code_to_deploy = "def evaluate(tx):\n    return tx.amount > 10000"
+        name = f"Rule_{rule_id or uuid.uuid4().hex[:6]}"
+        desc = "Analyst approved rule"
+        cmd = "Analyst approval"
+    else:
+        code_to_deploy = request_body.code or "def evaluate(tx):\n    return tx.amount > 10000"
+        name = request_body.name or f"Rule_{rule_id or uuid.uuid4().hex[:6]}"
+        desc = request_body.description or "Analyst approved rule"
+        cmd = request_body.command or "Analyst approval"
 
     dep_req = DeployRuleRequest(name=name, code=code_to_deploy, description=desc, command=cmd)
     res = deploy_rule(dep_req)
 
     if not res.success:
-        raise HTTPException(status_code=400, detail=res.message)
+        return JSONResponse(status_code=400, content={"status": "error", "message": res.message, "detail": res.message})
 
     return {"status": "deployed", "rule": res.rule, "message": res.message}
+
 
 
 @router.post("/rules/revert", tags=["Frontend Dashboard"])
