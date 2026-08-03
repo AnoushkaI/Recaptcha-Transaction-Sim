@@ -25,6 +25,10 @@ class Transaction(BaseModel):
     merchant_category: str = Field(..., description="Category e.g. electronics, crypto, retail, travel")
     device_id: str = Field(..., description="Device fingerprint ID")
     is_international: bool = Field(default=False, description="Flag indicating cross-border transaction")
+    user_name: Optional[str] = Field(default=None, description="Simulated user name")
+    title: Optional[str] = Field(default=None, description="Scenario title")
+    description: Optional[str] = Field(default=None, description="Scenario narrative description")
+
 
     # Behavioral Telemetry Fields (formulae.docx Step 1)
     mouse_movement_quality: float = Field(default=0.80, ge=0.0, le=1.0)

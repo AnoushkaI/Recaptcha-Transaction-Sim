@@ -54,47 +54,67 @@ MAX_ALERTS_HISTORY = 20
 
 def record_flagged_alert(alert: FlaggedAlert) -> dict:
     mapped = map_flagged_alert_to_frontend(alert)
+    tx_id = mapped.get("transaction", {}).get("id")
+    alert_id = mapped.get("id")
+
+    # Deduplicate by alert ID or transaction ID to prevent duplicate items
+    for existing in alerts_history:
+        ex_tx_id = existing.get("transaction", {}).get("id")
+        if (alert_id and existing.get("id") == alert_id) or (tx_id and ex_tx_id == tx_id):
+            return existing
+
     alerts_history.insert(0, mapped)
     if len(alerts_history) > MAX_ALERTS_HISTORY:
         alerts_history.pop()
     return mapped
 
 def map_flagged_alert_to_frontend(alert: FlaggedAlert) -> dict:
-    name = (alert.rule_name or "").lower()
-
-    if "high amount" in name or "wire" in name or "cross-border" in name:
-        severity = "high"
-        score = 0.90
-    elif "crypto" in name or "gaming" in name or "new account" in name or "electronics" in name:
-        severity = "medium"
-        score = 0.60
-    elif "micro" in name or "gas" in name or "travel" in name or "velocity" in name:
-        severity = "low"
-        score = 0.35
-    else:
-        if alert.score >= 0.8:
-            severity = "high"
-            score = alert.score
-        elif alert.score >= 0.5:
-            severity = "medium"
-            score = alert.score
-        else:
-            severity = "low"
-            score = alert.score
-
     tx_dict = (
         alert.transaction_details.model_dump()
         if hasattr(alert.transaction_details, "model_dump")
-        else alert.transaction_details
+        else dict(alert.transaction_details)
     )
+
+    if not tx_dict.get("telemetry_risk_score") or not tx_dict.get("classification"):
+        res = evaluate_transaction(tx_dict)
+        tx_dict["telemetry_score"] = res.telemetry_score
+        tx_dict["telemetry_risk_score"] = res.telemetry_risk_score
+        tx_dict["transaction_risk_score"] = res.transaction_risk_score
+        tx_dict["final_risk_score"] = res.final_risk_score
+        tx_dict["classification"] = res.classification
+
+    cls = (tx_dict.get("classification") or "").upper()
+    final_score = tx_dict.get("final_risk_score") if tx_dict.get("final_risk_score") is not None else alert.score
+
+    if cls == "HIGH_RISK" or final_score >= 0.60:
+        severity = "high"
+        score = final_score
+    elif cls == "SUSPICIOUS" or final_score >= 0.30:
+        severity = "medium"
+        score = final_score
+    elif cls == "SAFE" or final_score < 0.30:
+        severity = "low"
+        score = final_score
+    else:
+        name = (alert.rule_name or "").lower()
+        if "high amount" in name or "wire" in name or "cross-border" in name:
+            severity = "high"
+            score = 0.90
+        elif "crypto" in name or "gaming" in name or "new account" in name or "electronics" in name:
+            severity = "medium"
+            score = 0.60
+        else:
+            severity = "low"
+            score = alert.score
 
     # Ensure transaction object includes realistic user names, titles, and descriptions
     if not tx_dict.get("user_name"):
         NAMES_SAMPLE = ["Alex Morgan", "Elena Rostova", "Liam Chen", "Sarah Jenkins", "Devon Vance", "Priya Sharma", "Marcus Vance", "Sophia Martinez", "David Kim", "Emma Watson"]
         tx_dict["user_name"] = random.choice(NAMES_SAMPLE)
-    if not tx_dict.get("title"):
-        tx_dict["title"] = alert.rule_name or "Fraud Detection Alert"
     
+    scenario_title = tx_dict.get("title") or alert.rule_name or "Fraud Detection Alert"
+    tx_dict["title"] = scenario_title
+
     # Generate realistic, varied description if missing
     amt = tx_dict.get("amount", 0)
     loc = tx_dict.get("location", "US-NY")
@@ -103,6 +123,7 @@ def map_flagged_alert_to_frontend(alert: FlaggedAlert) -> dict:
     acc_id = tx_dict.get("account_id", "acc_user")
     
     if not tx_dict.get("description") or "Automated risk detection triggered" in str(tx_dict.get("description")):
+        name = (alert.rule_name or "").lower()
         if "high amount" in name or amt > 2000:
             tx_dict["description"] = f"High amount purchase of ₹{amt:,.0f} by {u_name} in {cat} category from {loc}."
         elif "intl" in name or "wire" in name or tx_dict.get("is_international"):
@@ -114,14 +135,6 @@ def map_flagged_alert_to_frontend(alert: FlaggedAlert) -> dict:
         else:
             tx_dict["description"] = f"Transaction of ₹{amt:,.0f} performed by {u_name} on account {acc_id} ({loc})."
 
-    if not tx_dict.get("telemetry_risk_score") or not tx_dict.get("classification"):
-        res = evaluate_transaction(tx_dict)
-        tx_dict["telemetry_score"] = res.telemetry_score
-        tx_dict["telemetry_risk_score"] = res.telemetry_risk_score
-        tx_dict["transaction_risk_score"] = res.transaction_risk_score
-        tx_dict["final_risk_score"] = res.final_risk_score
-        tx_dict["classification"] = res.classification
-
     return {
         "id": alert.id,
         "rule_triggered": alert.rule_name,
@@ -130,13 +143,15 @@ def map_flagged_alert_to_frontend(alert: FlaggedAlert) -> dict:
         "timestamp": alert.flagged_at,
         "transaction": tx_dict,
         "user_name": tx_dict.get("user_name"),
-        "title": tx_dict.get("title"),
+        "title": scenario_title,
         "description": tx_dict.get("description"),
         "telemetry_risk_score": tx_dict.get("telemetry_risk_score"),
         "transaction_risk_score": tx_dict.get("transaction_risk_score"),
         "final_risk_score": tx_dict.get("final_risk_score"),
         "classification": tx_dict.get("classification"),
     }
+
+
 
 
 # ── Request / Response Pydantic Schemas ──────────────────────────────────────
@@ -155,6 +170,8 @@ class RevertRuleRequest(BaseModel):
 
 class SimulatorControlRequest(BaseModel):
     action: str = Field(..., description="Action: 'play', 'pause', or 'stop'")
+    profile_id: Optional[str] = Field(default=None, description="Active fraud profile scenario ID")
+
 
 
 class DeployResponse(BaseModel):
@@ -176,12 +193,16 @@ class ExplainResponse(BaseModel):
 class GenerateRuleRequest(BaseModel):
     command: str
     alert_id: Optional[str] = None
+    alert_data: Optional[Dict[str, Any]] = None
 
 
 class GenerateRuleResponse(BaseModel):
     code: str
-    valid: bool
+    explanation: Optional[str] = None
+    valid: bool = True
     error: Optional[str] = None
+
+
 
 
 class ProfileRequest(BaseModel):
@@ -317,17 +338,37 @@ def get_audit_log(rule_id: Optional[str] = None):
 
 @router.post("/api/simulator/control", tags=["Fraud Engine Core"])
 def control_simulator(request: SimulatorControlRequest):
+    if request.profile_id:
+        simulator.set_active_profile_id(request.profile_id)
     act = request.action.lower()
     if act == "play":
         simulator.play()
+        from backend.batch_generator import generate_batch_20
+        prof_id = request.profile_id or simulator.active_profile_id or "ACCOUNT_TAKEOVER"
+        txs = generate_batch_20(prof_id)
+        for tx in reversed(txs):
+            tx_obj = Transaction(**tx)
+            alert = FlaggedAlert(
+                id=f"alt_{uuid.uuid4().hex[:8]}",
+                transaction_id=tx_obj.id,
+                rule_id="profile_scenario",
+                rule_name=tx_obj.title or "Profile Fraud Alert",
+                score=tx_obj.final_risk_score or 0.50,
+                flagged_at=tx_obj.timestamp,
+                transaction_details=tx_obj
+            )
+            record_flagged_alert(alert)
     elif act == "pause":
         simulator.pause()
     elif act == "stop":
         simulator.stop()
+        alerts_history.clear()
     else:
         raise HTTPException(status_code=400, detail="Action must be 'play', 'pause', or 'stop'")
 
-    return {"status": simulator.state.value}
+    return {"status": simulator.state.value, "profile_id": simulator.active_profile_id}
+
+
 
 
 @router.post("/api/simulator/profile", tags=["Fraud Engine Core"])
@@ -358,14 +399,24 @@ async def explain_alert(
     alert_id: str,
     body: ExplainRequest = ExplainRequest(),
 ) -> ExplainResponse:
-    alert = next((a for a in alerts_history if a["id"] == alert_id), None)
+    alert = next((a for a in alerts_history if a.get("id") == alert_id or a.get("transaction", {}).get("id") == alert_id), None)
+    if not alert and body.alert_data:
+        alert = body.alert_data
     if not alert:
         alert = {
             "id": alert_id,
-            "rule_triggered": "Suspicious Activity Detected",
+            "rule_triggered": "Fraud Detection Alert",
             "severity": "high",
             "timestamp": datetime.now(timezone.utc).isoformat(),
-            "transaction": {"id": "tx_unknown", "amount": 3500.0, "location": "US-NY", "account_id": "acc_unknown"}
+            "transaction": {
+                "id": alert_id,
+                "user_name": "Devon Vance",
+                "account_id": "acc_8443",
+                "amount": 3543.0,
+                "location": "CN-BEI",
+                "title": "High Amount Transaction Threshold",
+                "description": "High amount transaction performed by Devon Vance on account acc_8443 (CN-BEI)."
+            }
         }
 
     result = await orchestrator.route(command=body.command, context=alert)
@@ -381,35 +432,62 @@ async def explain_alert(
 
 @router.post("/rules/generate", response_model=GenerateRuleResponse, tags=["Frontend Dashboard"])
 async def generate_rule_endpoint(body: GenerateRuleRequest) -> GenerateRuleResponse:
-    context = (
-        next((a for a in alerts_history if a["id"] == body.alert_id), None)
-        if body.alert_id
-        else None
-    )
+    context = None
+    if body.alert_data:
+        context = body.alert_data
+    elif body.alert_id:
+        context = next(
+            (a for a in alerts_history if a.get("id") == body.alert_id or a.get("transaction", {}).get("id") == body.alert_id),
+            None
+        )
+    if not context and alerts_history:
+        context = alerts_history[0]
 
-    result = await orchestrator.route(command=body.command, context=context)
+    try:
+        result = await orchestrator.route(command=body.command, context=context)
+        agent_output = result.get("result") if isinstance(result, dict) else None
 
-    if result.get("error") or not result.get("result"):
+        if isinstance(agent_output, dict):
+            code_val = agent_output.get("code", "")
+            expl_val = agent_output.get("explanation")
+            if isinstance(code_val, dict):
+                expl_val = code_val.get("explanation") or expl_val
+                code_val = code_val.get("code", "")
+
+            return GenerateRuleResponse(
+                code=str(code_val or ""),
+                explanation=expl_val,
+                valid=agent_output.get("valid", True),
+                error=agent_output.get("error"),
+            )
+
+        if agent_output:
+            return GenerateRuleResponse(
+                code=str(agent_output),
+                explanation=None,
+                valid=True,
+                error=None,
+            )
+
         from backend.ai.agents.rule_writer import generate_fallback_rule
-        code = generate_fallback_rule(body.command, context)
+        fb = generate_fallback_rule(body.command, context)
         return GenerateRuleResponse(
-            code=code,
+            code=fb.get("code", "") if isinstance(fb, dict) else str(fb),
+            explanation=fb.get("explanation") if isinstance(fb, dict) else None,
+            valid=True,
+            error=None,
+        )
+    except Exception as exc:
+        from backend.ai.agents.rule_writer import generate_fallback_rule
+        fb = generate_fallback_rule(body.command, context)
+        return GenerateRuleResponse(
+            code=fb.get("code", "") if isinstance(fb, dict) else str(fb),
+            explanation=fb.get("explanation") if isinstance(fb, dict) else None,
             valid=True,
             error=None,
         )
 
-    agent_output = result["result"]
-    if isinstance(agent_output, dict):
-        return GenerateRuleResponse(
-            code=agent_output.get("code", ""),
-            valid=agent_output.get("valid", True),
-            error=agent_output.get("error"),
-        )
-    return GenerateRuleResponse(
-        code=str(agent_output),
-        valid=True,
-        error=None,
-    )
+
 
 
 @router.post("/rules/deploy", tags=["Frontend Dashboard"])

@@ -48,7 +48,9 @@ class TransactionSimulator:
         self._async_listeners: List[Callable[[Transaction], Any]] = []
         self._task: Optional[asyncio.Task] = None
         self._counter: int = 1000
+        self.active_profile_id: Optional[str] = None
         self.loaded_profiles: List[Dict[str, Any]] = []
+        self._tier_queue: List[str] = []
 
         # Load profile definitions library if available
         lib_path = Path(profile_library_path or "backend/profiles/profiles.json")
@@ -59,6 +61,13 @@ class TransactionSimulator:
                     self.loaded_profiles = data.get("profiles", [])
             except Exception:
                 self.loaded_profiles = []
+
+    def _get_next_tier(self) -> str:
+        if not self._tier_queue:
+            batch = ["HIGH"] * 6 + ["MEDIUM"] * 8 + ["SAFE"] * 6
+            random.shuffle(batch)
+            self._tier_queue = batch
+        return self._tier_queue.pop(0)
 
     def add_listener(self, callback: Callable[[Transaction], None]) -> None:
         """Register a synchronous listener callback for generated transactions."""
@@ -76,9 +85,18 @@ class TransactionSimulator:
         if callback in self._async_listeners:
             self._async_listeners.remove(callback)
 
+    def set_active_profile_id(self, profile_id: str) -> None:
+        """Set the active fraud profile scenario ID (e.g. GIFT_CARD_FRAUD, ACCOUNT_TAKEOVER)."""
+        if profile_id:
+            if self.active_profile_id != profile_id:
+                self.active_profile_id = profile_id
+                self._tier_queue.clear()
+
     def set_profile(self, profile: CustomProfile) -> None:
         """Inject a custom profile to bias generation distribution."""
         self.profile = profile
+        self.active_profile_id = None
+        self._tier_queue.clear()
 
     def play(self) -> None:
         """Start or resume transaction generation."""
@@ -112,6 +130,18 @@ class TransactionSimulator:
     def generate_single_transaction(self) -> Transaction:
         """Generate a single profile-driven transaction with calculated telemetry and risk scores."""
         self._counter += 1
+        
+        # Check if active_profile_id is set and use scenario generator
+        try:
+            from backend.batch_generator import generate_single_profile_transaction, PROFILE_SCENARIOS
+            if self.active_profile_id in PROFILE_SCENARIOS:
+                target_tier = self._get_next_tier()
+                tx_dict = generate_single_profile_transaction(self.active_profile_id, tier=target_tier)
+                return Transaction(**tx_dict)
+        except Exception:
+            pass
+
+
         tx_id = f"tx_{self._counter}_{uuid.uuid4().hex[:6]}"
         account_id = f"acc_{random.randint(1000, 9999)}"
         device_id = f"dev_{random.randint(1000, 9999)}"
@@ -119,6 +149,7 @@ class TransactionSimulator:
 
         # If profile definitions are loaded from backend/profiles/profiles.json, pick one
         if self.loaded_profiles and random.random() > self.profile.high_risk_location_bias:
+
             prof = random.choice(self.loaded_profiles)
             beh = prof.get("behavioral", {})
             trx = prof.get("transactional", {})

@@ -215,20 +215,21 @@ section[data-testid="stSidebar"] { display: none; }
 .msg-explain {
     background: #131a2e;
     border: 1px solid #1e2d50;
-    border-radius: 2px 10px 10px 10px;
-    padding: 12px 14px;
-    margin: 6px 0;
+    border-radius: 8px;
+    padding: 16px 18px;
+    margin: 10px 0;
     clear: both;
 }
 .msg-explain-label {
-    font-size: 10px;
+    font-size: 11px;
     font-weight: 700;
     color: #4f7aff;
     text-transform: uppercase;
-    letter-spacing: 0.8px;
-    margin-bottom: 6px;
+    letter-spacing: 1px;
+    margin-bottom: 8px;
 }
-.msg-explain-text { font-size: 13px; color: #cbd5e1; line-height: 1.6; }
+.msg-explain-text { font-size: 13px; color: #cbd5e1; line-height: 1.7; }
+
 .msg-rule {
     background: #0f1a12;
     border: 1px solid #1e3a24;
@@ -413,10 +414,10 @@ init_state()
 
 
 # ─── API helpers ──────────────────────────────────────────────────────────────
-def api(method: str, path: str, **kwargs):
+def api(method: str, path: str, timeout: int = 60, **kwargs):
     """Thin wrapper around requests; returns (data, error_str)."""
     try:
-        r = requests.request(method, f"{BASE_URL}{path}", timeout=8, **kwargs)
+        r = requests.request(method, f"{BASE_URL}{path}", timeout=timeout, **kwargs)
         r.raise_for_status()
         return r.json(), None
     except requests.exceptions.ConnectionError:
@@ -436,16 +437,22 @@ def fetch_alerts():
     return data or [], err
 
 
-def explain_alert(alert_id: str, command: str):
-    data, err = api("POST", f"/alerts/{alert_id}/explain",
-                    json={"command": command})
+def explain_alert(alert_id: str, command: str, alert_data: dict = None):
+    payload = {"command": command}
+    if alert_data:
+        payload["alert_data"] = alert_data
+    data, err = api("POST", f"/alerts/{alert_id}/explain", json=payload, timeout=60)
     return data, err
 
 
-def generate_rule(command: str, alert_id: str):
-    data, err = api("POST", "/rules/generate",
-                    json={"command": command, "alert_id": alert_id})
+def generate_rule(command: str, alert_id: str, alert_data: dict = None):
+    payload = {"command": command, "alert_id": alert_id}
+    if alert_data:
+        payload["alert_data"] = alert_data
+    data, err = api("POST", "/rules/generate", json=payload, timeout=60)
     return data, err
+
+
 
 
 def deploy_rule(rule_name: str, code: str, description: str, command: str):
@@ -461,9 +468,13 @@ def revert_rule():
     return data, err
 
 
-def set_simulator_state(action: str):
-    data, err = api("POST", "/simulator/control", json={"action": action})
+def set_simulator_state(action: str, profile_id: str = None):
+    payload = {"action": action}
+    if profile_id:
+        payload["profile_id"] = profile_id
+    data, err = api("POST", "/simulator/control", json=payload)
     return data, err
+
 
 
 def create_profile(name: str, rules: dict):
@@ -511,7 +522,7 @@ def severity_badge(sev: str) -> str:
 
 
 def code_diff_html(code: str) -> str:
-    lines = code.split("\n")
+    lines = (code or "").strip().split("\n")
     rows = ""
     for i, line in enumerate(lines, 1):
         escaped = (line
@@ -526,22 +537,23 @@ def code_diff_html(code: str) -> str:
             f'<span class="diff-line-content">+&nbsp;{escaped}</span>'
             f'</div>'
         )
-    return f"""
-    <div class="diff-container">
-      <div class="diff-header">
-        <span style="color:#22c55e">+</span>
-        <span>rule.py</span>
-        <span style="margin-left:auto;color:#64748b;font-size:10px">new rule · {len(lines)} lines</span>
-      </div>
-      <div class="diff-body">
-        <div class="diff-line" style="color:#374151;padding:2px 12px">
-          <span class="diff-line-num">@@</span>
-          <span>&nbsp;@@ -0,0 +1,{len(lines)} @@</span>
-        </div>
-        {rows}
-      </div>
-    </div>
-    """
+    return (
+        f'<div class="diff-container">'
+        f'<div class="diff-header">'
+        f'<span style="color:#22c55e">+</span>&nbsp;'
+        f'<span>rule.py</span>'
+        f'<span style="margin-left:auto;color:#64748b;font-size:10px">new rule &middot; {len(lines)} lines</span>'
+        f'</div>'
+        f'<div class="diff-body">'
+        f'<div class="diff-line" style="color:#374151;padding:2px 12px">'
+        f'<span class="diff-line-num">@@</span>'
+        f'<span>&nbsp;@@ -0,0 +1,{len(lines)} @@</span>'
+        f'</div>'
+        f'{rows}'
+        f'</div>'
+        f'</div>'
+    )
+
 
 
 # ─── Auto-refresh ─────────────────────────────────────────────────────────────
@@ -609,7 +621,7 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
-sim_cols = st.columns([2.5, 1.2, 1, 1, 1])
+sim_cols = st.columns([3, 1.2, 1, 1])
 
 with sim_cols[0]:
     selected_prof = st.selectbox(
@@ -621,34 +633,28 @@ with sim_cols[0]:
     )
     if selected_prof != st.session_state.get("selected_profile_id"):
         st.session_state.selected_profile_id = selected_prof
+        res, err = simulate_profile(selected_prof, count=20)
+        if not err:
+            st.session_state.profile_transactions = res.get("transactions", [])
+            set_simulator_state("play", selected_prof)
+            st.session_state.sim_state = "running"
+            st.rerun()
 
 with sim_cols[1]:
     st.markdown("<div style='height:28px'></div>", unsafe_allow_html=True)
-    if st.button("🎲 Generate Batch (20)", key="btn_gen_batch", use_container_width=True):
+    if st.button("▶  Play", key="btn_play", use_container_width=True, type="primary"):
         prof_to_run = st.session_state.get("selected_profile_id", "ACCOUNT_TAKEOVER")
         res, err = simulate_profile(prof_to_run, count=20)
         if err:
             st.toast(f"Error: {err}", icon="❌")
         else:
             st.session_state.profile_transactions = res.get("transactions", [])
-            fresh, _ = fetch_alerts()
-            if fresh:
-                st.session_state.alerts = fresh[:MAX_ALERTS]
-            st.toast(f"Generated 20 synthetic transactions for {prof_to_run}", icon="⚡")
+            set_simulator_state("play", prof_to_run)
+            st.session_state.sim_state = "running"
+            st.toast(f"Simulated 20 profile transactions for {prof_to_run}", icon="⚡")
             st.rerun()
 
 with sim_cols[2]:
-    st.markdown("<div style='height:28px'></div>", unsafe_allow_html=True)
-    play_disabled = (sim_state == "running")
-    if st.button("▶  Play", disabled=play_disabled, key="btn_play", use_container_width=True):
-        _, err = set_simulator_state("play")
-        if err:
-            st.toast(f"Error: {err}", icon="❌")
-        else:
-            st.session_state.sim_state = "running"
-            st.rerun()
-
-with sim_cols[3]:
     st.markdown("<div style='height:28px'></div>", unsafe_allow_html=True)
     pause_disabled = (sim_state != "running")
     if st.button("⏸  Pause", disabled=pause_disabled, key="btn_pause", use_container_width=True):
@@ -659,10 +665,11 @@ with sim_cols[3]:
             st.session_state.sim_state = "paused"
             st.rerun()
 
-with sim_cols[4]:
+with sim_cols[3]:
     st.markdown("<div style='height:28px'></div>", unsafe_allow_html=True)
     stop_disabled = (sim_state == "stopped")
     if st.button("⏹  Stop", disabled=stop_disabled, key="btn_stop", use_container_width=True):
+        st.session_state.profile_transactions = []
         _, err = set_simulator_state("stop")
         if err:
             st.toast(f"Error: {err}", icon="❌")
@@ -671,6 +678,7 @@ with sim_cols[4]:
             st.rerun()
 
 st.markdown('</div>', unsafe_allow_html=True)
+
 st.markdown("---")
 
 
@@ -716,18 +724,30 @@ else:
             "classification": alt.get("classification"),
         })
 
+def _get_item_cls(a):
+    c = a.get("classification")
+    if c in ["HIGH_RISK", "SUSPICIOUS", "SAFE"]:
+        return c
+    score = a.get("final_risk_score") or 0
+    if score >= 0.6:
+        return "HIGH_RISK"
+    if score >= 0.3:
+        return "SUSPICIOUS"
+    return "SAFE"
+
 cls_order = {"HIGH_RISK": 0, "SUSPICIOUS": 1, "SAFE": 2}
 sorted_items = sorted(
     feed_items,
     key=lambda a: (
-        cls_order.get(a.get("classification") or ("HIGH_RISK" if (a.get("final_risk_score") or 0) >= 0.6 else "SUSPICIOUS" if (a.get("final_risk_score") or 0) >= 0.3 else "SAFE"), 9),
+        cls_order.get(_get_item_cls(a), 9),
         -(a.get("final_risk_score") or 0)
     )
 )
 
-high_count       = sum(1 for a in sorted_items if (a.get("classification") == "HIGH_RISK" or (a.get("final_risk_score") or 0) >= 0.6))
-suspicious_count = sum(1 for a in sorted_items if (a.get("classification") == "SUSPICIOUS" or (0.3 <= (a.get("final_risk_score") or 0) < 0.6)))
-safe_count       = sum(1 for a in sorted_items if (a.get("classification") == "SAFE" or (a.get("final_risk_score") or 0) < 0.3))
+high_count       = sum(1 for a in sorted_items if _get_item_cls(a) == "HIGH_RISK")
+suspicious_count = sum(1 for a in sorted_items if _get_item_cls(a) == "SUSPICIOUS")
+safe_count       = sum(1 for a in sorted_items if _get_item_cls(a) == "SAFE")
+
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -768,7 +788,8 @@ with left_col:
             t_risk = item.get("telemetry_risk_score") or txn.get("telemetry_risk_score", 0.5)
             tx_risk = item.get("transaction_risk_score") or txn.get("transaction_risk_score", 0.5)
             f_risk = item.get("final_risk_score") or txn.get("final_risk_score", 0.5)
-            cls_name = item.get("classification") or txn.get("classification", "HIGH_RISK" if f_risk >= 0.6 else "SUSPICIOUS" if f_risk >= 0.3 else "SAFE")
+            cls_name = _get_item_cls(item)
+
             
             # Risk factor visual formatting & high-risk flagging
             is_high_risk = cls_name == "HIGH_RISK"
@@ -866,7 +887,7 @@ with right_col:
         panel_subtitle = f'<span style="font-size:10px;color:#64748b;font-family:\'JetBrains Mono\',monospace;margin-left:auto;">{selected.get("id","")}</span>'
 
     st.markdown(
-        f'<div class="panel-header" style="border-radius:8px 8px 0 0;">🤖&nbsp;AI Investigator{panel_subtitle}</div>',
+        f'<div class="panel-header" style="border-radius:8px 8px 0 0;">🛡️&nbsp;SECURITY INVESTIGATION PANEL{panel_subtitle}</div>',
         unsafe_allow_html=True,
     )
 
@@ -914,7 +935,7 @@ with right_col:
             messages = st.session_state.chat_messages
             if not messages:
                 st.markdown(
-                    '<div class="msg-system">Ask the AI to explain this alert or generate a detection rule.</div>',
+                    '<div class="msg-system">Ask the assistant to explain this alert or generate a detection rule.</div>',
                     unsafe_allow_html=True,
                 )
 
@@ -930,22 +951,30 @@ with right_col:
                 elif mtype == "explain":
                     st.markdown(f"""
                     <div class="msg-explain">
-                      <div class="msg-explain-label">AI Forensic Analysis</div>
+                      <div class="msg-explain-label">INVESTIGATION REPORT</div>
                       <div class="msg-explain-text">{msg["text"]}</div>
                     </div>
                     """, unsafe_allow_html=True)
+
+
 
                 elif mtype == "rule":
                     retry_html = ""
                     if msg.get("attempts", 1) > 1:
                         retry_html = f'<span class="retry-badge">⟳ {msg["attempts"]} attempts</span>'
 
+                    explanation_html = ""
+                    if msg.get("explanation"):
+                        explanation_html = f'<div style="font-size:13px;color:#cbd5e1;margin-bottom:12px;line-height:1.6;">{msg["explanation"]}</div>'
+
                     st.markdown(f"""
                     <div class="msg-rule">
-                      <div class="msg-rule-label">Generated Detection Rule {retry_html}</div>
+                      <div class="msg-rule-label">GENERATED DETECTION RULE {retry_html}</div>
+                      {explanation_html}
                       {code_diff_html(msg.get("code", ""))}
                     </div>
                     """, unsafe_allow_html=True)
+
 
                     if not msg.get("valid") and msg.get("error"):
                         st.error(f"Validation failed: {msg['error']}")
@@ -1022,7 +1051,8 @@ with right_col:
                                "make", "rule", "detect", "flag"])
 
             if is_generate:
-                result, err = generate_rule(cmd_text, alert_id)
+                result, err = generate_rule(cmd_text, alert_id, alert_data=selected)
+
                 if err:
                     st.session_state.chat_messages.append({"type": "error", "text": err})
                 else:
@@ -1030,18 +1060,21 @@ with right_col:
                     msg = {
                         "type": "rule",
                         "code": result.get("code", ""),
+                        "explanation": result.get("explanation", ""),
                         "valid": result.get("valid", False),
                         "error": result.get("error"),
                         "attempts": result.get("attempts", 1),
                         "command": cmd_text,
                         "ruleId": rule_id,
                     }
+
                     st.session_state.chat_messages.append(msg)
                     if result.get("valid"):
                         st.session_state.pending_rule = msg
             else:
-                result, err = explain_alert(alert_id, cmd_text)
+                result, err = explain_alert(alert_id, cmd_text, alert_data=selected)
                 if err:
+
                     st.session_state.chat_messages.append({"type": "error", "text": err})
                 else:
                     st.session_state.chat_messages.append(

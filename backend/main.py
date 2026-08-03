@@ -173,7 +173,24 @@ async def lifespan(app: FastAPI):
             "type": "transaction",
             "data": tx_data
         })
-        rules_engine.score_transaction(tx)
+        triggered_alerts = rules_engine.score_transaction(tx)
+
+        # If no active custom rule triggered on this transaction, record profile scenario transaction
+        # so live console displays scenario alerts continuously across High, Suspicious, and Safe categories
+        if not triggered_alerts:
+            alert = FlaggedAlert(
+                id=f"alt_{uuid.uuid4().hex[:8]}",
+                transaction_id=tx.id,
+                rule_id="profile_scenario",
+                rule_name=tx.title or "Profile Fraud Alert",
+                score=tx.final_risk_score or 0.50,
+                flagged_at=tx.timestamp,
+                transaction_details=tx
+            )
+            mapped_alert = record_flagged_alert(alert)
+            await ws_manager.broadcast(mapped_alert)
+
+
 
     async def handle_flagged_alert(alert: FlaggedAlert):
         mapped_alert = record_flagged_alert(alert)

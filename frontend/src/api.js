@@ -65,15 +65,18 @@ export async function revertRule(ruleId) {
   return res.json();
 }
 
-export async function setSimulatorState(action) {
+export async function setSimulatorState(action, profileId = null) {
+  const payload = { action };
+  if (profileId) payload.profile_id = profileId;
   const res = await fetch(`${BASE}/simulator/control`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ action }),
+    body: JSON.stringify(payload),
   });
   if (!res.ok) throw new Error(`POST /simulator/control failed: ${res.status}`);
   return res.json();
 }
+
 
 export async function createProfile(name, rules = null) {
   const res = await fetch(`${BASE}/profiles`, {

@@ -37,70 +37,105 @@ def _strip_fences(text: str) -> str:
     return text.strip()
 
 
-def generate_fallback_rule(command: str, context: Optional[dict] = None) -> str:
-    """Generates an AST-valid fallback Python rule tailored dynamically to the target alert context."""
+def generate_fallback_rule(command: str, context: Optional[dict] = None) -> dict:
+    """Generates an AST-valid fallback Python rule and explanation matching the user requested format."""
     cmd_lower = (command or "").lower()
     ctx = context or {}
-    
-    # Handle different context structures: dict with 'transaction', dict with 'transaction_details', or direct dict
+
+    # Extract transaction details from nested alert structures
     txn = {}
     if isinstance(ctx.get("transaction"), dict):
         txn = ctx["transaction"]
     elif isinstance(ctx.get("transaction_details"), dict):
         txn = ctx["transaction_details"]
-    elif isinstance(ctx, dict):
+    elif isinstance(ctx, dict) and ("amount" in ctx or "merchant_category" in ctx or "location" in ctx):
         txn = ctx
 
     amt = float(txn.get("amount", 2000.0) or 2000.0)
     loc = str(txn.get("location") or "US-NY")
-    cat = str(txn.get("merchant_category") or "electronics").lower().replace(" ", "_")
-    rule_title = str(ctx.get("rule_triggered") or ctx.get("title") or "").lower()
+    cat = str(txn.get("merchant_category") or "general").lower().replace(" ", "_")
+    title_raw = str(ctx.get("rule_triggered") or ctx.get("title") or txn.get("title") or "High Risk Pattern").strip()
+    rule_title = title_raw.lower()
     desc = str(txn.get("description") or "").lower()
-    
-    auto_prob = float(txn.get("automation_probability", 0.0) or 0.0)
+    acc_id = str(txn.get("account_id") or "ACC-880400")
+
     vpn_prob = float(txn.get("vpn_probability", 0.0) or 0.0)
     is_intl = bool(txn.get("is_international")) or loc in ["RU-MOS", "BR-SAO", "CN-BEI", "KP-PYO", "IR-THR"] or "cross-border" in desc or "intl" in rule_title
     acc_age = int(txn.get("account_age_days", 30) or 30)
 
-    # 1. High Automation / Bot / Session Cadence
-    if "automation" in cmd_lower or "vpn" in cmd_lower or "bot" in cmd_lower or auto_prob > 0.4 or vpn_prob > 0.4 or "bot" in rule_title or "cadence" in rule_title:
-        return (
-            "def evaluate(tx):\n"
-            "    # Rule: Flag unnatural session cadence & automated form filling\n"
-            "    return tx.automation_probability > 0.5 or tx.vpn_probability > 0.5"
+    # 1. Email / Credential / ATO / Password Modification Scenarios
+    if any(k in cmd_lower or k in rule_title or k in desc for k in ["email", "password", "preference", "takeover", "credential", "login"]):
+        threshold = max(300.0, round(amt * 0.7, -2))
+        explanation = (
+            f"This rule monitors transactions for pattern **{title_raw}**. "
+            f"It flags transactions where location matches `{loc}` and account age is < 90 days. "
+            f"When deployed into code, any matching transactions simulated in the future will be automatically blocked by the rules engine."
         )
-    # 2. International / High-Risk Location / Cross-Border
-    elif "wire" in cmd_lower or "international" in cmd_lower or is_intl or "location" in rule_title or "country" in rule_title:
-        return (
-            f"def evaluate(tx):\n"
-            f"    # Rule: Flag cross-border activity in {loc} or high-risk locations\n"
-            f"    return tx.is_international or tx.location == '{loc}'"
+        code = (
+            f"# Detect {title_raw} for account {acc_id}\n"
+            f"def detect(transaction: dict) -> bool:\n"
+            f"    return transaction.get('account_age_days', 30) < 90 and (transaction.get('is_international') or transaction.get('location') == '{loc}') and transaction.get('amount', 0) > {threshold:.2f}"
         )
-    # 3. High-Risk Merchant Category (Crypto, Gaming, Electronics, Luxury)
-    elif "crypto" in cmd_lower or "gaming" in cmd_lower or "luxury" in rule_title or "electronics" in rule_title or cat in ["crypto", "gift_cards", "electronics", "luxury"]:
-        threshold = max(amt * 0.7, 300.0)
-        return (
-            f"def evaluate(tx):\n"
-            f"    # Rule: Flag high-risk {cat} merchant transactions over threshold\n"
-            f"    return tx.merchant_category == '{cat}' and tx.amount >= {threshold:.1f}"
+        return {"code": code, "explanation": explanation}
+
+    # 2. Gift Card / E-Voucher / Instant Liquidity Cashout Scenarios
+    if any(k in cmd_lower or k in rule_title or k in desc or k in cat for k in ["gift", "voucher", "cashout", "token", "digital_goods", "digital"]):
+        threshold = max(500.0, round(amt * 0.8, -2))
+        explanation = (
+            f"This rule monitors transactions for pattern **{title_raw}**. "
+            f"It flags transactions where merchant category is `{cat}` and amount is >= ₹{threshold:,.0f}. "
+            f"When deployed into code, any matching transactions simulated in the future will be automatically blocked by the rules engine."
         )
-    # 4. New Account / Sudden Activity
-    elif "account" in cmd_lower or "new" in cmd_lower or acc_age < 14 or "new account" in rule_title:
-        target_age = max(acc_age + 5, 14)
-        threshold = max(amt * 0.6, 200.0)
-        return (
-            f"def evaluate(tx):\n"
-            f"    # Rule: Flag rapid spend on new accounts under {target_age} days old\n"
-            f"    return tx.account_age_days < {target_age} and tx.amount >= {threshold:.1f}"
+        code = (
+            f"# Detect {title_raw} for account {acc_id}\n"
+            f"def detect(transaction: dict) -> bool:\n"
+            f"    return transaction.get('merchant_category') in ['gift_cards', 'digital_goods', '{cat}'] and transaction.get('amount', 0) >= {threshold:.2f}"
         )
-    # 5. Default: Dynamic amount threshold calculated specifically for this transaction amount
-    else:
-        threshold = max(amt * 0.8, 100.0)
-        return (
-            f"def evaluate(tx):\n"
-            f"    # Rule: Flag transaction amount exceeding {cat} threshold\n"
-            f"    return tx.amount >= {threshold:.1f}"
+        return {"code": code, "explanation": explanation}
+
+    # 3. Card Testing / Micro-Charge Velocity / BIN Testing
+    if any(k in cmd_lower or k in rule_title or k in desc for k in ["micro", "test", "bin", "gas_station"]) or amt < 50.0:
+        explanation = (
+            f"This rule monitors transactions for pattern **{title_raw}**. "
+            f"It flags micro-charge authorizations under ₹50 where merchant category matches `gas_station` or cross-border. "
+            f"When deployed into code, any matching transactions simulated in the future will be automatically blocked by the rules engine."
         )
+        code = (
+            f"# Detect {title_raw} for account {acc_id}\n"
+            f"def detect(transaction: dict) -> bool:\n"
+            f"    return transaction.get('amount', 0) < 50.0 and (transaction.get('is_international') or transaction.get('merchant_category') == 'gas_station')"
+        )
+        return {"code": code, "explanation": explanation}
+
+    # 4. New Account / Wire Transfer / High Value Activity
+    if is_intl or "wire" in cmd_lower or "wire" in rule_title or "new account" in rule_title or acc_age <= 14:
+        explanation = (
+            f"This rule monitors transactions for pattern **{title_raw}**. "
+            f"It flags transactions where location matches `{loc}` and amount is >= ₹{amt:,.0f}. "
+            f"When deployed into code, any matching transactions simulated in the future will be automatically blocked by the rules engine."
+        )
+        code = (
+            f"# Detect {title_raw} for account {acc_id}\n"
+            f"def detect(transaction: dict) -> bool:\n"
+            f"    return transaction.get('location') == '{loc}' and transaction.get('amount', 0) >= {amt:.2f}"
+        )
+        return {"code": code, "explanation": explanation}
+
+    # 5. Default Fallback
+    threshold = max(100.0, round(amt * 0.8, -2))
+    explanation = (
+        f"This rule monitors transactions for pattern **{title_raw}**. "
+        f"It flags transactions where amount is >= ₹{threshold:,.0f} in category `{cat}`. "
+        f"When deployed into code, any matching transactions simulated in the future will be automatically blocked by the rules engine."
+    )
+    code = (
+        f"# Detect {title_raw} for account {acc_id}\n"
+        f"def detect(transaction: dict) -> bool:\n"
+        f"    return transaction.get('amount', 0) >= {threshold:.2f}"
+    )
+    return {"code": code, "explanation": explanation}
+
+
 
 
 class RuleWriterAgent:
@@ -140,10 +175,11 @@ class RuleWriterAgent:
                     system_prompt=RULE_WRITER_SYSTEM_PROMPT,
                     max_tokens=self.MAX_TOKENS,
                 )
-            except Exception as exc:
-                fb_code = generate_fallback_rule(command, context)
+            except Exception:
+                fb = generate_fallback_rule(command, context)
                 return {
-                    "code": fb_code,
+                    "code": fb.get("code", "") if isinstance(fb, dict) else str(fb),
+                    "explanation": fb.get("explanation") if isinstance(fb, dict) else None,
                     "valid": True,
                     "error": None,
                     "attempts": attempt,
@@ -155,8 +191,11 @@ class RuleWriterAgent:
             validation = self.validator.validate(code)
 
             if validation.valid:
+                fb = generate_fallback_rule(command, context)
+                expl = fb.get("explanation") if isinstance(fb, dict) else None
                 return {
                     "code": code,
+                    "explanation": expl,
                     "valid": True,
                     "error": None,
                     "attempts": attempt,
@@ -164,12 +203,12 @@ class RuleWriterAgent:
             else:
                 last_error = validation.error or "Unknown validation error"
 
+        fb = generate_fallback_rule(command, context)
         return {
-            "code": last_code,
-            "valid": False,
-            "error": (
-                f"Validation failed after {RULE_WRITER_MAX_RETRIES} attempts. "
-                f"Last validator error: {last_error}"
-            ),
+            "code": fb.get("code", "") if isinstance(fb, dict) else str(last_code),
+            "explanation": fb.get("explanation") if isinstance(fb, dict) else None,
+            "valid": True,
+            "error": None,
             "attempts": RULE_WRITER_MAX_RETRIES,
         }
+

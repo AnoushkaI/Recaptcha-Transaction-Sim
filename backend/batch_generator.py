@@ -326,9 +326,9 @@ def generate_batch_20(profile_id: str = "ACCOUNT_TAKEOVER") -> list[dict]:
     """Generates exactly 20 randomized synthetic transactions for the given profile.
     
     Hardcoded Risk Split:
-    - 7 HIGH RISK (final_risk_score >= 0.60)
+    - 6 HIGH RISK (final_risk_score >= 0.60)
     - 8 SUSPICIOUS (0.30 <= final_risk_score < 0.60)
-    - 5 SAFE (final_risk_score < 0.30)
+    - 6 SAFE (final_risk_score < 0.30)
     """
     profile_key = profile_id if profile_id in PROFILE_SCENARIOS else "ACCOUNT_TAKEOVER"
     scenarios = PROFILE_SCENARIOS[profile_key]
@@ -338,10 +338,10 @@ def generate_batch_20(profile_id: str = "ACCOUNT_TAKEOVER") -> list[dict]:
     shuffled_names = list(USER_NAMES)
     random.shuffle(shuffled_names)
 
-    # 1. Generate 7 HIGH RISK transactions
+    # 1. Generate 6 HIGH RISK transactions
     high_scenarios = list(scenarios["HIGH"])
     random.shuffle(high_scenarios)
-    for i in range(7):
+    for i in range(6):
         u_name = shuffled_names[i % len(shuffled_names)]
         title, desc_template = high_scenarios[i % len(high_scenarios)]
         tx_id = f"tx_hr_{i+1}_{uuid.uuid4().hex[:6]}"
@@ -395,7 +395,7 @@ def generate_batch_20(profile_id: str = "ACCOUNT_TAKEOVER") -> list[dict]:
     med_scenarios = list(scenarios["MEDIUM"])
     random.shuffle(med_scenarios)
     for i in range(8):
-        u_name = shuffled_names[(7 + i) % len(shuffled_names)]
+        u_name = shuffled_names[(6 + i) % len(shuffled_names)]
         title, desc_template = med_scenarios[i % len(med_scenarios)]
         tx_id = f"tx_sp_{i+1}_{uuid.uuid4().hex[:6]}"
         acc_id = f"acc_{random.randint(1000, 9999)}"
@@ -444,11 +444,11 @@ def generate_batch_20(profile_id: str = "ACCOUNT_TAKEOVER") -> list[dict]:
         tx_data["classification"] = "SUSPICIOUS"
         txs.append(tx_data)
 
-    # 3. Generate 5 SAFE transactions
+    # 3. Generate 6 SAFE transactions
     safe_scenarios = list(scenarios["SAFE"])
     random.shuffle(safe_scenarios)
-    for i in range(5):
-        u_name = shuffled_names[(15 + i) % len(shuffled_names)]
+    for i in range(6):
+        u_name = shuffled_names[(14 + i) % len(shuffled_names)]
         title, desc_template = safe_scenarios[i % len(safe_scenarios)]
         tx_id = f"tx_sf_{i+1}_{uuid.uuid4().hex[:6]}"
         acc_id = f"acc_{random.randint(1000, 9999)}"
@@ -498,3 +498,150 @@ def generate_batch_20(profile_id: str = "ACCOUNT_TAKEOVER") -> list[dict]:
         txs.append(tx_data)
 
     return txs
+
+
+def generate_single_profile_transaction(profile_id: str, tier: str = None) -> dict:
+    """Generate a single profile-driven synthetic transaction with title, description, and scenario details."""
+    profile_key = profile_id if profile_id in PROFILE_SCENARIOS else "ACCOUNT_TAKEOVER"
+    scenarios = PROFILE_SCENARIOS[profile_key]
+    cat_map = scenarios.get("categories", {"HIGH": ["wire_transfer"], "MEDIUM": ["electronics"], "SAFE": ["groceries"]})
+
+    if not tier or tier not in ["HIGH", "MEDIUM", "SAFE"]:
+        tier = random.choices(["HIGH", "MEDIUM", "SAFE"], weights=[0.30, 0.40, 0.30])[0]
+
+    scen_list = scenarios[tier]
+    title, desc_template = random.choice(scen_list)
+
+
+    tx_id = f"tx_{tier[:2].lower()}_{uuid.uuid4().hex[:6]}"
+    acc_id = f"acc_{random.randint(1000, 9999)}"
+    u_name = random.choice(USER_NAMES)
+
+    if tier == "HIGH":
+        loc = random.choice(LOCATIONS_MAP["HIGH"])
+        amt = round(random.uniform(2800.0, 9800.0), 2)
+        avg_amt = round(random.uniform(150.0, 400.0), 2)
+        mc = random.choice(cat_map["HIGH"])
+        desc = desc_template.format(amount=amt, loc=loc)
+        tx_data = {
+            "id": tx_id,
+            "account_id": acc_id,
+            "user_name": u_name,
+            "title": title,
+            "description": desc,
+            "amount": amt,
+            "location": loc,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "account_age_days": random.randint(1, 12),
+            "merchant_category": mc,
+            "device_id": f"dev_{random.randint(1000, 9999)}",
+            "is_international": True,
+            "mouse_movement_quality": round(random.uniform(0.05, 0.30), 2),
+            "typing_speed_cpm": round(random.uniform(70.0, 130.0), 1),
+            "typing_error_rate": round(random.uniform(0.20, 0.45), 2),
+            "scroll_behavior": round(random.uniform(0.05, 0.25), 2),
+            "device_reputation": round(random.uniform(0.10, 0.35), 2),
+            "ip_reputation": round(random.uniform(0.05, 0.25), 2),
+            "automation_probability": round(random.uniform(0.75, 0.95), 2),
+            "vpn_probability": round(random.uniform(0.70, 0.95), 2),
+            "tor_probability": round(random.uniform(0.15, 0.65), 2),
+            "average_amount": avg_amt,
+            "previous_transactions": random.randint(1, 5),
+            "known_device_probability": 0.1,
+            "transaction_frequency_per_day": round(random.uniform(10.0, 20.0), 1),
+            "unfamiliar_recipient_probability": 0.9,
+            "password_changed_recently_probability": 0.8,
+            "refund_attempts": random.choice([1, 2, 3]),
+        }
+        res = evaluate_transaction(tx_data)
+        tx_data["telemetry_score"] = res.telemetry_score
+        tx_data["telemetry_risk_score"] = res.telemetry_risk_score
+        tx_data["transaction_risk_score"] = res.transaction_risk_score
+        tx_data["final_risk_score"] = round(max(res.final_risk_score, random.uniform(0.68, 0.94)), 2)
+        tx_data["classification"] = "HIGH_RISK"
+    elif tier == "MEDIUM":
+        loc = random.choice(LOCATIONS_MAP["MEDIUM"])
+        amt = round(random.uniform(1100.0, 3100.0), 2)
+        avg_amt = round(random.uniform(300.0, 600.0), 2)
+        mc = random.choice(cat_map["MEDIUM"])
+        desc = desc_template.format(amount=amt, loc=loc)
+        tx_data = {
+            "id": tx_id,
+            "account_id": acc_id,
+            "user_name": u_name,
+            "title": title,
+            "description": desc,
+            "amount": amt,
+            "location": loc,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "account_age_days": random.randint(20, 90),
+            "merchant_category": mc,
+            "device_id": f"dev_{random.randint(1000, 9999)}",
+            "is_international": random.choice([True, False]),
+            "mouse_movement_quality": round(random.uniform(0.45, 0.65), 2),
+            "typing_speed_cpm": round(random.uniform(170.0, 250.0), 1),
+            "typing_error_rate": round(random.uniform(0.05, 0.15), 2),
+            "scroll_behavior": round(random.uniform(0.45, 0.70), 2),
+            "device_reputation": round(random.uniform(0.50, 0.70), 2),
+            "ip_reputation": round(random.uniform(0.45, 0.68), 2),
+            "automation_probability": round(random.uniform(0.20, 0.40), 2),
+            "vpn_probability": round(random.uniform(0.25, 0.50), 2),
+            "tor_probability": 0.0,
+            "average_amount": avg_amt,
+            "previous_transactions": random.randint(10, 45),
+            "known_device_probability": 0.5,
+            "transaction_frequency_per_day": round(random.uniform(3.0, 7.0), 1),
+            "unfamiliar_recipient_probability": 0.35,
+            "password_changed_recently_probability": 0.1,
+            "refund_attempts": 0,
+        }
+        res = evaluate_transaction(tx_data)
+        tx_data["telemetry_score"] = res.telemetry_score
+        tx_data["telemetry_risk_score"] = res.telemetry_risk_score
+        tx_data["transaction_risk_score"] = res.transaction_risk_score
+        tx_data["final_risk_score"] = round(min(max(res.final_risk_score, random.uniform(0.38, 0.52)), 0.58), 2)
+        tx_data["classification"] = "SUSPICIOUS"
+    else:
+        loc = random.choice(LOCATIONS_MAP["SAFE"])
+        amt = round(random.uniform(25.0, 450.0), 2)
+        avg_amt = round(random.uniform(100.0, 500.0), 2)
+        mc = random.choice(cat_map["SAFE"])
+        desc = desc_template.format(amount=amt, loc=loc)
+        tx_data = {
+            "id": tx_id,
+            "account_id": acc_id,
+            "user_name": u_name,
+            "title": title,
+            "description": desc,
+            "amount": amt,
+            "location": loc,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "account_age_days": random.randint(180, 1200),
+            "merchant_category": mc,
+            "device_id": f"dev_{random.randint(1000, 9999)}",
+            "is_international": False,
+            "mouse_movement_quality": round(random.uniform(0.85, 0.99), 2),
+            "typing_speed_cpm": round(random.uniform(200.0, 320.0), 1),
+            "typing_error_rate": round(random.uniform(0.01, 0.04), 2),
+            "scroll_behavior": round(random.uniform(0.85, 0.99), 2),
+            "device_reputation": round(random.uniform(0.90, 0.99), 2),
+            "ip_reputation": round(random.uniform(0.88, 0.99), 2),
+            "automation_probability": round(random.uniform(0.00, 0.05), 2),
+            "vpn_probability": 0.0,
+            "tor_probability": 0.0,
+            "average_amount": avg_amt,
+            "previous_transactions": random.randint(50, 350),
+            "known_device_probability": 0.95,
+            "transaction_frequency_per_day": round(random.uniform(1.0, 4.0), 1),
+            "unfamiliar_recipient_probability": 0.02,
+            "password_changed_recently_probability": 0.0,
+            "refund_attempts": 0,
+        }
+        res = evaluate_transaction(tx_data)
+        tx_data["telemetry_score"] = res.telemetry_score
+        tx_data["telemetry_risk_score"] = res.telemetry_risk_score
+        tx_data["transaction_risk_score"] = res.transaction_risk_score
+        tx_data["final_risk_score"] = round(min(res.final_risk_score, 0.28), 2)
+        tx_data["classification"] = "SAFE"
+    return tx_data
+

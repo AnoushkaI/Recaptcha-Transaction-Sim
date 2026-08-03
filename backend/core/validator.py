@@ -136,9 +136,9 @@ class ASTSafetyValidator:
                         line_number=lineno
                     )
 
-            # 3. Validate transaction field access (tx.<attr>)
+            # 3. Validate transaction field access (tx.<attr> or transaction.<attr>)
             if isinstance(node, ast.Attribute):
-                if isinstance(node.value, ast.Name) and node.value.id == "tx":
+                if isinstance(node.value, ast.Name) and node.value.id in ["tx", "transaction"]:
                     field_name = node.attr
                     if field_name not in ALLOWED_TRANSACTION_FIELDS:
                         return ValidationResult(
@@ -180,13 +180,15 @@ class ASTSafetyValidator:
                 error=f"Compilation error during dry-run: {type(e).__name__}: {str(e)}"
             )
 
-        # Find evaluate function
-        eval_func = local_scope.get("evaluate")
+        # Find evaluate or detect function
+        eval_func = local_scope.get("evaluate") or local_scope.get("detect")
         if not eval_func or not callable(eval_func):
             return ValidationResult(
                 valid=False,
-                error="Rule code must define an entry function named 'evaluate(tx)'"
+                error="Rule code must define an entry function named 'evaluate(tx)' or 'detect(transaction: dict)'"
             )
+
+
 
         # Create test sample transactions
         samples: List[Transaction] = [

@@ -33,11 +33,23 @@ class RuleCompiler:
         except Exception as e:
             raise ValueError(f"Failed to compile rule code: {type(e).__name__}: {str(e)}")
 
-        eval_func = local_scope.get("evaluate")
+        eval_func = local_scope.get("evaluate") or local_scope.get("detect")
         if not eval_func or not callable(eval_func):
-            raise ValueError("Compiled code must contain a callable 'evaluate(tx)' function")
+            raise ValueError("Compiled code must contain a callable 'evaluate(tx)' function (or 'detect(transaction)')")
 
-        return eval_func
+
+        def wrapped_eval(tx: Transaction) -> bool:
+            try:
+                return bool(eval_func(tx))
+            except Exception:
+                if hasattr(tx, "model_dump"):
+                    return bool(eval_func(tx.model_dump()))
+                elif isinstance(tx, dict):
+                    return bool(eval_func(tx))
+                return False
+
+        return wrapped_eval
+
 
     def compile_and_register(self, rule: Rule, rules_engine: RulesEngine) -> Callable[[Transaction], bool]:
         """

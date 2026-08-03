@@ -14,7 +14,7 @@ export default function SimulatorControls({ onRevert, activeProfile }) {
   async function handleSim(action) {
     setLoading(true);
     try {
-      const res = await setSimulatorState(action);
+      const res = await setSimulatorState(action, activeProfile);
       if (action === 'play')  setSimState('running');
       if (action === 'pause') setSimState('paused');
       if (action === 'stop')  setSimState('stopped');
@@ -24,6 +24,7 @@ export default function SimulatorControls({ onRevert, activeProfile }) {
       setLoading(false);
     }
   }
+
 
   async function handleRevert() {
     setLoading(true);

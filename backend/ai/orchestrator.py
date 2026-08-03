@@ -6,6 +6,7 @@ LangGraph-based Orchestrator — pure routing, async node execution.
 
 from __future__ import annotations
 
+import asyncio
 from typing import Any, Literal, Optional
 from typing_extensions import TypedDict
 
@@ -66,33 +67,43 @@ async def run_investigator(state: OrchestratorState) -> OrchestratorState:
 
 
 async def run_rule_writer(state: OrchestratorState) -> OrchestratorState:
-    """Node 2b: Async call RuleWriterAgent, get Python rule code."""
+    """Node 2b: Async call RuleWriterAgent, get Python rule code with 4s timeout protection."""
     cmd = state["command"]
     ctx = state["context"] or {}
     try:
         provider = get_provider(role="rule_writer")
         agent = RuleWriterAgent(provider=provider)
-        result = await agent.generate_rule(
-            command=cmd,
-            context=ctx,
+        result = await asyncio.wait_for(
+            agent.generate_rule(command=cmd, context=ctx),
+            timeout=4.0
         )
         if result and result.get("valid"):
+            code_val = result.get("code", "")
+            if isinstance(code_val, dict):
+                result["explanation"] = code_val.get("explanation") or result.get("explanation")
+                result["code"] = code_val.get("code", "")
             return {**state, "result": result, "error": None}
         from backend.ai.agents.rule_writer import generate_fallback_rule
-        fb_code = generate_fallback_rule(cmd, ctx)
+        fb = generate_fallback_rule(cmd, ctx)
+        code_str = fb.get("code", "") if isinstance(fb, dict) else str(fb)
+        expl_str = fb.get("explanation") if isinstance(fb, dict) else None
         return {
             **state,
-            "result": {"code": fb_code, "valid": True, "error": None, "ruleId": "rule_auto_gen"},
+            "result": {"code": code_str, "explanation": expl_str, "valid": True, "error": None, "ruleId": "rule_auto_gen"},
             "error": None
         }
     except Exception:
         from backend.ai.agents.rule_writer import generate_fallback_rule
-        fb_code = generate_fallback_rule(cmd, ctx)
+        fb = generate_fallback_rule(cmd, ctx)
+        code_str = fb.get("code", "") if isinstance(fb, dict) else str(fb)
+        expl_str = fb.get("explanation") if isinstance(fb, dict) else None
         return {
             **state,
-            "result": {"code": fb_code, "valid": True, "error": None, "ruleId": "rule_auto_gen"},
+            "result": {"code": code_str, "explanation": expl_str, "valid": True, "error": None, "ruleId": "rule_auto_gen"},
             "error": None
         }
+
+
 
 
 def _build_graph() -> Any:
