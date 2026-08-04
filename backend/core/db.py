@@ -82,6 +82,34 @@ def init_db(db_path: str = DEFAULT_DB_PATH) -> None:
     );
     """)
 
+    # 5. SOC Prevention Rules table (condition-based, parallel to code-based rules)
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS soc_rules (
+        rule_id TEXT PRIMARY KEY,
+        profile_id TEXT NOT NULL,
+        rule_name TEXT NOT NULL,
+        conditions_json TEXT NOT NULL,
+        action TEXT NOT NULL DEFAULT 'BLOCK',
+        status TEXT NOT NULL DEFAULT 'ACTIVE',
+        created_at TEXT NOT NULL,
+        hit_count INTEGER NOT NULL DEFAULT 0
+    );
+    """)
+
+    # 6. SOC Audit Log table (SOC lifecycle events — separate from tamper-evident rule audit_log)
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS soc_audit_log (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        timestamp TEXT NOT NULL,
+        transaction_id TEXT NOT NULL,
+        rule_id TEXT NOT NULL DEFAULT '',
+        event_type TEXT NOT NULL,
+        action TEXT NOT NULL,
+        risk_score REAL NOT NULL DEFAULT 0.0,
+        reason TEXT NOT NULL DEFAULT ''
+    );
+    """)
+
     conn.commit()
     conn.close()
     logger.info(f"Initialized database schema successfully at {db_path}")

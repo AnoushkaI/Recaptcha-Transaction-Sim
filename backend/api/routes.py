@@ -590,3 +590,166 @@ def evaluate_scoring_endpoint(payload: Dict[str, Any]):
     """
     return evaluate_transaction(payload)
 
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 3. SOC PREVENTION RULE ENDPOINTS
+# ─────────────────────────────────────────────────────────────────────────────
+
+from backend.soc.rule_store import (
+    deploy_soc_rule,
+    get_all_soc_rules,
+    deactivate_soc_rule,
+    extract_conditions_from_transaction,
+    evaluate_transaction_against_soc_rules,
+    increment_rule_hit,
+)
+from backend.soc.soc_audit import log_soc_event, get_soc_audit_logs
+
+
+class SOCRuleDeployRequest(BaseModel):
+    transaction_id: str
+    profile_id: str = "UNKNOWN"
+    rule_name: Optional[str] = None
+    conditions: Optional[Dict[str, Any]] = None
+    action: str = "BLOCK"
+    transaction_data: Optional[Dict[str, Any]] = None
+
+
+@router.post("/soc/rules/deploy", tags=["SOC Prevention"])
+def deploy_soc_rule_endpoint(body: SOCRuleDeployRequest):
+    """
+    One-click deploy a SOC prevention rule from an investigated transaction.
+    Auto-extracts conditions from transaction_data if not provided.
+    Logs RULE_DEPLOYED event to soc_audit_log.
+    """
+    tx_data = body.transaction_data or {}
+    conditions = body.conditions or extract_conditions_from_transaction(tx_data)
+    rule_name = body.rule_name or f"Block {body.profile_id.replace('_', ' ').title()} Pattern"
+    risk_score = float(tx_data.get("final_risk_score", 0.0))
+
+    deployed = deploy_soc_rule(
+        profile_id=body.profile_id,
+        rule_name=rule_name,
+        conditions=conditions,
+        action=body.action,
+    )
+
+    log_soc_event(
+        event_type="RULE_DEPLOYED",
+        transaction_id=body.transaction_id,
+        action="RULE_DEPLOYED",
+        risk_score=risk_score,
+        rule_id=deployed["rule_id"],
+        reason=f"SOC rule {deployed['rule_id']} deployed from investigation of {body.transaction_id}",
+    )
+
+    return {
+        "success": True,
+        "rule": deployed,
+        "message": f"Rule {deployed['rule_id']} successfully deployed and active!",
+    }
+
+
+@router.get("/soc/rules", tags=["SOC Prevention"])
+def list_soc_rules():
+    """Return all SOC condition-based prevention rules."""
+    return get_all_soc_rules()
+
+
+@router.post("/soc/rules/{rule_id}/deactivate", tags=["SOC Prevention"])
+def deactivate_soc_rule_endpoint(rule_id: str):
+    """Deactivate a SOC prevention rule."""
+    ok = deactivate_soc_rule(rule_id)
+    if not ok:
+        raise HTTPException(status_code=404, detail=f"SOC rule '{rule_id}' not found.")
+    return {"success": True, "rule_id": rule_id, "message": f"Rule {rule_id} deactivated."}
+
+
+@router.get("/soc/audit-log", tags=["SOC Prevention"])
+def get_soc_audit_log(limit: int = 200):
+    """Return recent SOC lifecycle audit events (newest first)."""
+    return get_soc_audit_logs(limit=limit)
+
+
+@router.post("/soc/simulate/enforce", tags=["SOC Prevention"])
+def simulate_with_enforcement(body: dict):
+    """
+    Generate a batch of 20 transactions for a profile and apply SOC rule enforcement.
+    Returns transactions with enforcement_action, matched_rule_id, and reason fields.
+    Logs all enforcement events to soc_audit_log.
+    """
+    from backend.batch_generator import generate_batch_20
+    profile_id = body.get("profile_id", "ACCOUNT_TAKEOVER")
+    txs = generate_batch_20(profile_id)
+
+    enriched = []
+    for tx in txs:
+        tx_id = tx.get("id", "")
+        risk_score = float(tx.get("final_risk_score", 0.0))
+        cls = tx.get("classification", "SAFE")
+
+        # Log TRANSACTION_CREATED
+        log_soc_event(
+            event_type="TRANSACTION_CREATED",
+            transaction_id=tx_id,
+            action="CREATED",
+            risk_score=risk_score,
+        )
+
+        # Log ALERT_CREATED for risky transactions
+        if cls in ("HIGH_RISK", "SUSPICIOUS"):
+            log_soc_event(
+                event_type="ALERT_CREATED",
+                transaction_id=tx_id,
+                action="ALERT_CREATED",
+                risk_score=risk_score,
+                reason=f"Transaction classified as {cls}",
+            )
+
+        # Evaluate SOC rules
+        action, matched_rule_id, reason = evaluate_transaction_against_soc_rules(tx)
+
+        if matched_rule_id:
+            increment_rule_hit(matched_rule_id)
+            log_soc_event(
+                event_type="RULE_MATCHED",
+                transaction_id=tx_id,
+                action=action,
+                risk_score=risk_score,
+                rule_id=matched_rule_id,
+                reason=reason,
+            )
+            if action == "BLOCK":
+                log_soc_event(
+                    event_type="TRANSACTION_BLOCKED",
+                    transaction_id=tx_id,
+                    action="BLOCKED_BY_RULE",
+                    risk_score=risk_score,
+                    rule_id=matched_rule_id,
+                    reason=reason,
+                )
+            elif action == "CHALLENGE":
+                log_soc_event(
+                    event_type="CHALLENGE_TRIGGERED",
+                    transaction_id=tx_id,
+                    action="CHALLENGED",
+                    risk_score=risk_score,
+                    rule_id=matched_rule_id,
+                    reason=reason,
+                )
+        else:
+            log_soc_event(
+                event_type="TRANSACTION_ALLOWED",
+                transaction_id=tx_id,
+                action="ALLOWED",
+                risk_score=risk_score,
+                reason="No SOC rules matched",
+            )
+
+        tx["enforcement_action"] = action
+        tx["matched_rule_id"] = matched_rule_id
+        tx["enforcement_reason"] = reason
+        enriched.append(tx)
+
+    return {"profile_id": profile_id, "count": len(enriched), "transactions": enriched}
+
