@@ -296,6 +296,22 @@ def deploy_soc_rule_api(transaction_id: str, profile_id: str, transaction_data: 
     data, err = api("POST", "/soc/rules/deploy", json=payload)
     return data, err
 
+def delete_soc_rule_api(rule_id: str):
+    data, err = api("POST", f"/soc/rules/{rule_id}/delete")
+    return data, err
+
+def delete_all_soc_rules_api():
+    data, err = api("POST", "/soc/rules/delete-all")
+    return data, err
+
+def update_soc_rule_api(rule_id: str, rule_name: str = None, action: str = None, conditions: dict = None):
+    payload = {}
+    if rule_name is not None: payload["rule_name"] = rule_name
+    if action is not None: payload["action"] = action
+    if conditions is not None: payload["conditions"] = conditions
+    data, err = api("POST", f"/soc/rules/{rule_id}/update", json=payload)
+    return data, err
+
 def simulate_with_enforcement(profile_id: str):
     data, err = api("POST", "/soc/simulate/enforce", json={"profile_id": profile_id})
     return data, err
@@ -435,9 +451,9 @@ def simulate_profile_local(profile_id: str):
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# ─── SIMULATOR CONTROLS BAR ──────────────────────────────────────────────────
+# ─── SIMULATOR CONTROLS ENGINE ───────────────────────────────────────────────
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-st.markdown('<div style="padding: 12px 28px 6px 28px;">', unsafe_allow_html=True)
+st.markdown('<div style="padding: 10px 24px 4px 24px;">', unsafe_allow_html=True)
 
 sim_state = st.session_state.sim_state
 dot_cls = "running" if sim_state == "running" else ("paused" if sim_state == "paused" else "stopped")
@@ -449,24 +465,25 @@ challenged_count = sum(1 for v in enf.values() if v.get("action") == "CHALLENGE"
 
 enf_summary = ""
 if blocked_count or challenged_count:
-    enf_summary = (f'<span style="color:#EF4444;font-weight:700;margin-left:16px;">🛑 {blocked_count} Blocked</span>'
-                   f'<span style="color:#F59E0B;font-weight:700;margin-left:10px;">⚠️ {challenged_count} Challenged</span>')
+    enf_summary = (f'<span style="color:#EF4444;font-weight:700;margin-left:14px;padding:2px 8px;background:rgba(239,68,68,0.1);border-radius:4px;border:1px solid rgba(239,68,68,0.2);">🛑 {blocked_count} Blocked</span>'
+                   f'<span style="color:#F59E0B;font-weight:700;margin-left:8px;padding:2px 8px;background:rgba(245,158,11,0.1);border-radius:4px;border:1px solid rgba(245,158,11,0.2);">⚠️ {challenged_count} Challenged</span>')
 
 st.markdown(f"""
-<div class="controls-bar" style="padding:0;margin-bottom:6px;">
-  <div class="sim-state-pill">
+<div class="controls-bar" style="padding:10px 14px;margin-bottom:8px;background:#0f172a;border:1px solid #1e293b;border-radius:8px;">
+  <div class="sim-state-pill" style="display:flex;align-items:center;gap:8px;">
     <span class="dot {dot_cls}"></span>
-    Simulator: <strong style="color:#e2e8f0;margin-left:4px;">{sim_state}</strong>
+    <span style="font-size:12px;font-weight:700;color:#94a3b8;letter-spacing:0.5px;">SIMULATOR STATE:</span>
+    <strong style="color:#f8fafc;font-size:12px;text-transform:uppercase;font-family:'JetBrains Mono',monospace;">{sim_state}</strong>
   </div>
   {enf_summary}
 </div>
 """, unsafe_allow_html=True)
 
-sim_cols = st.columns([3, 1.2, 1, 1])
+sim_cols = st.columns([2.5, 1, 1, 1])
 
 with sim_cols[0]:
     selected_prof = st.selectbox(
-        "Select Active Fraud Profile (Source of Truth):",
+        "Active Fraud Profile (Source of Truth):",
         options=PROFILE_IDS,
         index=PROFILE_IDS.index(st.session_state.get("selected_profile_id", "ACCOUNT_TAKEOVER"))
         if st.session_state.get("selected_profile_id") in PROFILE_IDS else 3,
@@ -482,7 +499,7 @@ with sim_cols[0]:
 
 with sim_cols[1]:
     st.markdown("<div style='height:28px'></div>", unsafe_allow_html=True)
-    if st.button("▶  Play / Simulate", key="btn_play", use_container_width=True, type="primary"):
+    if st.button("▶  Simulate", key="btn_play", use_container_width=True, type="primary"):
         prof_to_run = st.session_state.get("selected_profile_id", "ACCOUNT_TAKEOVER")
         txs, err = simulate_profile_local(prof_to_run)
         if err:
@@ -520,7 +537,7 @@ with sim_cols[3]:
             st.rerun()
 
 st.markdown('</div>', unsafe_allow_html=True)
-st.markdown("---")
+st.markdown("<div style='margin-bottom:12px;'></div>", unsafe_allow_html=True)
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -717,7 +734,13 @@ with left_col:
                 st.rerun()
 
     # Stats bar
-    st.markdown("<br>", unsafe_allow_html=True)
+    st.markdown("""
+    <div style="margin-top:12px;margin-bottom:4px;">
+      <div style="font-size:11px;font-weight:700;color:#64748b;letter-spacing:0.5px;text-transform:uppercase;">
+        📊 Live Console Metrics Summary
+      </div>
+    </div>
+    """, unsafe_allow_html=True)
     s1, s2, s3, s4, s5 = st.columns(5)
     with s1:
         st.metric("Total", len(sorted_items))
@@ -786,12 +809,12 @@ with right_col:
         """, unsafe_allow_html=True)
 
         # ── Message feed ──────────────────────────────────────────────────────
-        feed_container = st.container(height=350)
+        feed_container = st.container(height=230)
         with feed_container:
             messages = st.session_state.chat_messages
             if not messages:
                 st.markdown(
-                    '<div class="msg-system">Ask the assistant to explain this alert or generate a detection rule.</div>',
+                    '<div class="msg-system">Review investigation explanation below. Click ⚡ Generate Rule to create a prevention rule.</div>',
                     unsafe_allow_html=True,
                 )
 
@@ -810,159 +833,221 @@ with right_col:
                       <div class="msg-explain-text">{msg["text"]}</div>
                     </div>
                     """, unsafe_allow_html=True)
-
-                elif mtype == "rule":
-                    retry_html = ""
-                    if msg.get("attempts", 1) > 1:
-                        retry_html = f'<span class="retry-badge">⟳ {msg["attempts"]} attempts</span>'
-                    explanation_html = ""
-                    if msg.get("explanation"):
-                        explanation_html = f'<div style="font-size:13px;color:#cbd5e1;margin-bottom:12px;line-height:1.6;">{msg["explanation"]}</div>'
-                    st.markdown(f"""
-                    <div class="msg-rule">
-                      <div class="msg-rule-label">GENERATED DETECTION RULE {retry_html}</div>
-                      {explanation_html}
-                      {code_diff_html(msg.get("code", ""))}
-                    </div>
-                    """, unsafe_allow_html=True)
-
-                    if not msg.get("valid") and msg.get("error"):
-                        st.error(f"Validation failed: {msg['error']}")
-
-                    if msg.get("valid"):
-                        rule_key = msg.get("ruleId", "unknown")
-                        btn_c1, btn_c2 = st.columns([1, 1])
-                        with btn_c1:
-                            if st.button("✓ Deploy rule", key=f"deploy_{rule_key}", type="primary", use_container_width=True):
-                                rdata, err = deploy_rule(
-                                    rule_name=f"Rule for Alert {selected.get('id','')}",
-                                    code=msg.get("code", ""),
-                                    description=f"Fraud detection rule via: {msg.get('command','analyst')}",
-                                    command=msg.get("command", "analyst command"),
-                                )
-                                if err:
-                                    st.session_state.chat_messages.append({"type": "error", "text": f"Deploy failed: {err}"})
-                                else:
-                                    st.session_state.chat_messages.append({"type": "system", "text": f"✅ Rule {rule_key} deployed successfully."})
-                                    st.session_state.pending_rule = None
-                                    st.session_state.rule_deployed_count += 1
-                                    st.rerun()
-                        with btn_c2:
-                            if st.button("✕ Reject", key=f"reject_{rule_key}", use_container_width=True):
-                                st.session_state.chat_messages.append({"type": "system", "text": "Rule rejected — not deployed."})
-                                st.session_state.pending_rule = None
-                                st.rerun()
-
                 elif mtype == "system":
                     st.markdown(f'<div class="msg-system">{msg["text"]}</div>', unsafe_allow_html=True)
                 elif mtype == "error":
                     st.markdown(f'<div class="msg-error">{msg["text"]}</div>', unsafe_allow_html=True)
 
-        # ── SOC Deploy Prevention Rule CTA ───────────────────────────────────
-        if sel_cls_name in ("HIGH_RISK", "SUSPICIOUS"):
-            from backend.soc.rule_store import extract_conditions_from_transaction
+        # ── SOC WORKFLOW STATES (State 1: Investigate, State 2: Generated, State 3: Already Active) ──
+        from backend.soc.rule_store import (
+            extract_conditions_from_transaction,
+            evaluate_transaction_against_soc_rules,
+            format_soc_rule_code,
+            get_soc_rule_by_id,
+        )
 
-            txn_for_extract = txn if txn else selected
-            auto_conditions = extract_conditions_from_transaction(txn_for_extract)
-            cond_summary = ", ".join(f"{k}: {v}" for k, v in auto_conditions.items())
+        txn_data = dict(txn if txn else selected)
+        if not txn_data.get("profile_id"):
+            txn_data["profile_id"] = st.session_state.get("selected_profile_id", "GIFT_CARD_FRAUD")
+        sel_tx_id = selected.get("id", "")
 
-            # Count existing SOC rules to determine next ID for display
-            existing_soc = fetch_soc_rules()
-            next_rule_num = len(existing_soc) + 1
-            next_rule_id_display = f"R-{next_rule_num:03d}"
+        # Deduplication / Active Check (State 3)
+        eval_action, eval_rule_id, eval_reason = evaluate_transaction_against_soc_rules(txn_data)
+        matched_rule_id = selected.get("matched_rule_id") or eval_rule_id
+        is_blocked_or_matched = bool(matched_rule_id) or selected.get("enforcement_action") in ("BLOCK", "CHALLENGE")
+
+        gen_draft_key = f"soc_gen_draft_{sel_tx_id}"
+        rule_draft = st.session_state.get(gen_draft_key)
+
+        # ── STATE 3: RULE ALREADY ACTIVE ──────────────────────────────────────
+        if is_blocked_or_matched:
+            matched_rule = get_soc_rule_by_id(matched_rule_id) if matched_rule_id else None
+            m_rule_name = matched_rule.get("rule_name", selected.get("title", "SOC Prevention Rule")) if matched_rule else "Gas Station Card Testing Surge Prevention"
+            m_action = matched_rule.get("action", selected.get("enforcement_action", "BLOCK")) if matched_rule else selected.get("enforcement_action", "BLOCK")
+            m_reason = eval_reason or selected.get("enforcement_reason") or f"This transaction matched the deployed prevention rule {matched_rule_id or 'R-ACTIVE'} because it satisfied all risk conditions."
 
             st.markdown(f"""
-            <div class="deploy-cta-box">
-              <div class="deploy-cta-title">⚡ Deploy SOC Prevention Rule ({next_rule_id_display})</div>
-              <div class="deploy-cta-desc">
-                Auto-extracted conditions from this transaction:<br>
-                <code style="color:#f59e0b;font-size:10px;">{cond_summary}</code>
+            <div style="background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.3);border-radius:8px;padding:14px;margin:10px 0;">
+              <div style="font-size:13px;font-weight:700;color:#ef4444;margin-bottom:4px;display:flex;align-items:center;gap:6px;">
+                🛑 Rule Already Active
+              </div>
+              <div style="font-size:11px;color:#cbd5e1;line-height:1.4;margin-bottom:8px;">
+                This transaction has already been prevented by an existing deployed rule.
+              </div>
+              <div style="background:#0d1117;border:1px solid #1e2433;border-radius:6px;padding:8px 10px;font-size:10px;color:#94a3b8;font-family:'JetBrains Mono',monospace;">
+                <div><strong style="color:#e2e8f0;">Matched Rule:</strong> <span style="color:#f59e0b;">{matched_rule_id or "R-ACTIVE"}</span></div>
+                <div><strong style="color:#e2e8f0;">Rule Name:</strong> {m_rule_name}</div>
+                <div><strong style="color:#e2e8f0;">Action:</strong> <span style="color:#ef4444;">{m_action}</span></div>
+                <div style="margin-top:4px;"><strong style="color:#e2e8f0;">Reason:</strong> {m_reason}</div>
               </div>
             </div>
             """, unsafe_allow_html=True)
 
-            deploy_col1, deploy_col2 = st.columns([2, 1])
-            with deploy_col1:
-                deploy_action = st.selectbox("Enforcement Action", ["BLOCK", "CHALLENGE"], key="soc_deploy_action")
-            with deploy_col2:
+            act_c1, act_c2, act_c3 = st.columns([1, 1, 1])
+            with act_c1:
+                if st.button("📜 Audit Log", key=f"btn_view_audit_{sel_tx_id}", use_container_width=True):
+                    st.toast("Check SOC Audit Log Timeline tab below", icon="📜")
+            with act_c2:
+                if matched_rule_id:
+                    if st.button("⏹ Revert Rule", key=f"btn_revert_{sel_tx_id}", type="secondary", use_container_width=True):
+                        api("POST", f"/soc/rules/{matched_rule_id}/deactivate")
+                        st.toast(f"Rule {matched_rule_id} deactivated!", icon="⏹")
+                        st.session_state.soc_rules = fetch_soc_rules()
+                        st.rerun()
+            with act_c3:
+                if st.button("✕ Close", key=f"btn_close_panel_{sel_tx_id}", use_container_width=True):
+                    st.session_state.selected_alert = None
+                    st.rerun()
+
+        # ── STATE 2: RULE GENERATED (Review & Deploy UI) ──────────────────────
+        elif rule_draft:
+            r_id = rule_draft["rule_id"]
+            r_name = rule_draft["rule_name"]
+            r_desc = rule_draft.get("description", f"Blocks high-risk transaction pattern for {selected.get('title','profile')}")
+            r_code = rule_draft["code"]
+            r_conds = rule_draft["conditions"]
+
+            st.markdown(f"""
+            <div class="msg-rule" style="margin-top:10px;">
+              <div class="msg-rule-label">GENERATED SOC PREVENTION RULE &bull; {r_id}</div>
+              <div style="font-size:12px;font-weight:700;color:#f1f5f9;margin-bottom:2px;">{r_name}</div>
+              <div style="font-size:11px;color:#94a3b8;margin-bottom:8px;line-height:1.4;">{r_desc}</div>
+            </div>
+            """, unsafe_allow_html=True)
+
+            st.code(r_code, language="python")
+
+            d_col1, d_col2 = st.columns([2, 1])
+            with d_col1:
+                chosen_action = st.selectbox("Enforcement Action", ["BLOCK", "CHALLENGE"], key=f"draft_act_{sel_tx_id}")
+            with d_col2:
                 st.markdown("<div style='height:28px'></div>", unsafe_allow_html=True)
-                if st.button(f"⚡ DEPLOY RULE ({next_rule_id_display})", key="btn_deploy_soc", type="primary", use_container_width=True):
+                if st.button(f"⚡ DEPLOY RULE ({r_id})", key=f"btn_deploy_draft_{sel_tx_id}", type="primary", use_container_width=True):
                     prof_id = st.session_state.get("selected_profile_id", "UNKNOWN")
-                    tx_id = selected.get("id", "")
-                    result, err = deploy_soc_rule_api(
-                        transaction_id=tx_id,
+                    res, err = deploy_soc_rule_api(
+                        transaction_id=sel_tx_id,
                         profile_id=prof_id,
-                        transaction_data=txn_for_extract,
-                        action=deploy_action,
+                        transaction_data=txn_data,
+                        action=chosen_action,
                     )
                     if err:
                         st.toast(f"Deploy failed: {err}", icon="❌")
                     else:
-                        deployed_id = result.get("rule", {}).get("rule_id", next_rule_id_display)
-                        st.toast(f"Rule {deployed_id} successfully deployed and active!", icon="🛡️")
-                        st.session_state.rule_deployed_count += 1
-                        # Refresh SOC rules cache
+                        dep_id = res.get("rule", {}).get("rule_id", r_id)
+                        st.toast(f"Rule {dep_id} successfully deployed and active!", icon="🛡️")
+                        st.session_state.pop(gen_draft_key, None)
                         st.session_state.soc_rules = fetch_soc_rules()
                         st.rerun()
 
-        # ── Quick action buttons ───────────────────────────────────────────────
-        st.markdown("<div style='height:4px'></div>", unsafe_allow_html=True)
-        qa1, qa2, qa3, qa4 = st.columns(4)
-        quick_cmds = [
-            (qa1, "Explain this",  "Explain this alert"),
-            (qa2, "Generate rule", "Generate a rule to detect this pattern"),
-            (qa3, "Why flagged?",  "Why was this flagged?"),
-            (qa4, "Flag similar",  "Flag similar transactions in future"),
-        ]
-
-        def _handle_send(cmd_text: str):
-            alert_id = selected.get("id", "")
-            st.session_state.chat_messages.append({"type": "user", "text": cmd_text})
-            is_generate = any(kw in cmd_text.lower() for kw in
-                              ["generate", "create", "write", "add", "build", "make", "rule", "detect", "flag"])
-            if is_generate:
-                result, err = generate_rule(cmd_text, alert_id, alert_data=selected)
-                if err:
-                    st.session_state.chat_messages.append({"type": "error", "text": err})
-                else:
-                    rule_id = f"rule_{int(time.time()*1000)}"
-                    msg = {
-                        "type": "rule", "code": result.get("code", ""),
-                        "explanation": result.get("explanation", ""),
-                        "valid": result.get("valid", False), "error": result.get("error"),
-                        "attempts": result.get("attempts", 1), "command": cmd_text, "ruleId": rule_id,
+            btn_rej_c1, btn_rej_c2, btn_rej_c3 = st.columns([1, 1, 1])
+            with btn_rej_c1:
+                if st.button("✏️ Edit Rule", key=f"btn_edit_draft_{sel_tx_id}", use_container_width=True):
+                    st.session_state[f"editing_draft_{sel_tx_id}"] = not st.session_state.get(f"editing_draft_{sel_tx_id}", False)
+                    st.rerun()
+            with btn_rej_c2:
+                if st.button("🔄 Regenerate", key=f"btn_regen_draft_{sel_tx_id}", use_container_width=True):
+                    existing_soc = fetch_soc_rules()
+                    next_rule_num = len(existing_soc) + 1
+                    new_r_id = f"R-{next_rule_num:03d}"
+                    auto_conds = extract_conditions_from_transaction(txn_data)
+                    rule_title = f"{selected.get('title', 'High Risk Pattern')} Prevention"
+                    formatted_code = format_soc_rule_code(
+                        new_r_id,
+                        rule_title,
+                        st.session_state.get("selected_profile_id", "UNKNOWN"),
+                        auto_conds,
+                        action="BLOCK",
+                        description=f"Blocks repeated high-risk authorization attempts associated with {selected.get('title', 'fraud scenario')}."
+                    )
+                    st.session_state[gen_draft_key] = {
+                        "rule_id": new_r_id,
+                        "rule_name": rule_title,
+                        "conditions": auto_conds,
+                        "code": formatted_code,
+                        "description": f"Blocks repeated high-risk authorization attempts associated with {selected.get('title', 'fraud scenario')}.",
                     }
-                    st.session_state.chat_messages.append(msg)
-                    if result.get("valid"):
-                        st.session_state.pending_rule = msg
-            else:
-                result, err = explain_alert(alert_id, cmd_text, alert_data=selected)
-                if err:
-                    st.session_state.chat_messages.append({"type": "error", "text": err})
-                else:
-                    st.session_state.chat_messages.append({"type": "explain", "text": result.get("explanation", "")})
-
-        for col, label, cmd in quick_cmds:
-            with col:
-                if st.button(label, key=f"qb_{label}", use_container_width=True):
-                    _handle_send(cmd)
+                    st.toast("Rule regenerated!", icon="🔄")
+                    st.rerun()
+            with btn_rej_c3:
+                if st.button("✕ Reject", key=f"btn_reject_draft_{sel_tx_id}", use_container_width=True):
+                    st.session_state.pop(gen_draft_key, None)
+                    st.session_state.pop(f"editing_draft_{sel_tx_id}", None)
+                    st.toast("Rule rejected", icon="✕")
                     st.rerun()
 
-        prompt = st.chat_input("Explain this alert… or Generate a rule for…", key="chat_input")
-        if prompt:
-            _handle_send(prompt)
-            st.rerun()
+            # Inline Rule Customization Form
+            if st.session_state.get(f"editing_draft_{sel_tx_id}", False):
+                import json
+                with st.expander("✏️ Customize Rule Conditions", expanded=True):
+                    with st.form(key=f"draft_edit_form_{sel_tx_id}"):
+                        edit_name = st.text_input("Rule Name", value=r_name, key=f"dr_name_{sel_tx_id}")
+                        edit_desc = st.text_input("Description", value=r_desc, key=f"dr_desc_{sel_tx_id}")
+                        edit_cond_json = st.text_area(
+                            "Conditions (JSON format)",
+                            value=json.dumps(r_conds, indent=2),
+                            key=f"dr_cond_{sel_tx_id}",
+                            height=120,
+                        )
+                        save_submitted = st.form_submit_button("💾 Save Customization", type="primary", use_container_width=True)
+                        if save_submitted:
+                            try:
+                                parsed_conds = json.loads(edit_cond_json)
+                                updated_code = format_soc_rule_code(
+                                    r_id,
+                                    edit_name,
+                                    st.session_state.get("selected_profile_id", "UNKNOWN"),
+                                    parsed_conds,
+                                    action=chosen_action,
+                                    description=edit_desc,
+                                )
+                                st.session_state[gen_draft_key] = {
+                                    "rule_id": r_id,
+                                    "rule_name": edit_name,
+                                    "conditions": parsed_conds,
+                                    "code": updated_code,
+                                    "description": edit_desc,
+                                }
+                                st.session_state[f"editing_draft_{sel_tx_id}"] = False
+                                st.toast("Rule customization saved!", icon="💾")
+                                st.rerun()
+                            except Exception as e:
+                                st.error(f"Invalid JSON in conditions: {e}")
+
+        # ── STATE 1: INVESTIGATION ONLY (Generate Rule button at bottom) ─────
+        else:
+            st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
+            if st.button("⚡ Generate Rule", key=f"btn_trigger_gen_{sel_tx_id}", type="primary", use_container_width=True):
+                existing_soc = fetch_soc_rules()
+                next_rule_num = len(existing_soc) + 1
+                next_rule_id_display = f"R-{next_rule_num:03d}"
+                auto_conds = extract_conditions_from_transaction(txn_data)
+                rule_title = f"{selected.get('title', 'High Risk Pattern')} Prevention"
+                formatted_code = format_soc_rule_code(
+                    next_rule_id_display,
+                    rule_title,
+                    st.session_state.get("selected_profile_id", "UNKNOWN"),
+                    auto_conds,
+                    action="BLOCK",
+                    description=f"Blocks repeated high-risk authorization attempts associated with {selected.get('title', 'fraud scenario')}."
+                )
+                st.session_state[gen_draft_key] = {
+                    "rule_id": next_rule_id_display,
+                    "rule_name": rule_title,
+                    "conditions": auto_conds,
+                    "code": formatted_code,
+                    "description": f"Blocks repeated high-risk authorization attempts associated with {selected.get('title', 'fraud scenario')}.",
+                }
+                st.toast(f"Generated SOC Prevention Rule {next_rule_id_display}!", icon="⚡")
+                st.rerun()
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # ─── BOTTOM TABS: Active Rules + SOC Audit Log ───────────────────────────────
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 st.markdown("---")
-tab_rules, tab_soc_audit, tab_code_audit, tab_custom = st.tabs([
+tab_rules, tab_soc_audit = st.tabs([
     "🛡️ Active Prevention Rules",
     "📜 SOC Audit Log Timeline",
-    "🔐 Code Rules & Audit Trail",
-    "➕ Custom Profile",
 ])
 
 
@@ -970,23 +1055,61 @@ tab_rules, tab_soc_audit, tab_code_audit, tab_custom = st.tabs([
 with tab_rules:
     st.markdown('<div style="height:8px"></div>', unsafe_allow_html=True)
 
-    col_soc, col_code = st.columns([1, 1], gap="medium")
+    soc_rules_data = fetch_soc_rules()
+    soc_rules_data = soc_rules_data if isinstance(soc_rules_data, list) else []
+    st.session_state.soc_rules = soc_rules_data
 
-    with col_soc:
-        st.markdown("""
-        <div style="font-size:13px;font-weight:700;color:#e2e8f0;margin-bottom:8px;">
-          ⚡ SOC Condition Rules
-          <span style="font-size:10px;color:#64748b;font-weight:400;margin-left:8px;">One-click deployed from investigation panel</span>
-        </div>
-        """, unsafe_allow_html=True)
+    # Profile list for filter
+    available_profiles = sorted(list(set(r.get("profile_id", "UNKNOWN") for r in soc_rules_data)))
+    filter_options = ["ALL PROFILES"] + available_profiles if available_profiles else ["ALL PROFILES"]
 
-        soc_rules_data = fetch_soc_rules()
-        st.session_state.soc_rules = soc_rules_data if isinstance(soc_rules_data, list) else []
+    col_flt, col_del_all = st.columns([3, 1])
+    with col_flt:
+        selected_rule_profile = st.selectbox(
+            "🔍 Filter Rules by Fraud Profile:",
+            options=filter_options,
+            key="rule_profile_filter",
+        )
+    with col_del_all:
+        st.markdown("<div style='height:28px'></div>", unsafe_allow_html=True)
+        if st.button("🗑️ Delete All Rules", key="btn_del_all_rules", use_container_width=True):
+            res, err = delete_all_soc_rules_api()
+            if err:
+                st.toast(f"Error deleting rules: {err}", icon="❌")
+            else:
+                st.toast("All SOC prevention rules deleted!", icon="🗑️")
+                st.session_state.soc_rules = []
+                st.rerun()
 
-        if not soc_rules_data:
-            st.info("No SOC prevention rules deployed yet. Investigate a HIGH RISK transaction and click ⚡ DEPLOY RULE.")
+    # Filter rules based on selection
+    if selected_rule_profile != "ALL PROFILES":
+        filtered_rules = [r for r in soc_rules_data if r.get("profile_id") == selected_rule_profile]
+    else:
+        filtered_rules = soc_rules_data
+
+    if not soc_rules_data:
+        st.info("No SOC prevention rules deployed yet. Investigate a HIGH RISK transaction and click ⚡ DEPLOY RULE.")
+    elif not filtered_rules:
+        st.info(f"No rules deployed for profile `{selected_rule_profile}`.")
+    else:
+        # Group by profile if showing ALL PROFILES
+        if selected_rule_profile == "ALL PROFILES":
+            grouped_rules = {}
+            for r in filtered_rules:
+                pid = r.get("profile_id", "UNKNOWN")
+                grouped_rules.setdefault(pid, []).append(r)
         else:
-            for rule in soc_rules_data:
+            grouped_rules = {selected_rule_profile: filtered_rules}
+
+        for prof_name, r_list in grouped_rules.items():
+            st.markdown(f"""
+            <div style="font-size:13px;font-weight:700;color:#38bdf8;margin:12px 0 6px 0;padding-bottom:4px;border-bottom:1px solid #1e2433;">
+              📂 Profile: <strong style="color:#f1f5f9;">{prof_name}</strong>
+              <span style="font-size:10px;color:#64748b;font-weight:400;margin-left:8px;">({len(r_list)} rule{"s" if len(r_list)!=1 else ""})</span>
+            </div>
+            """, unsafe_allow_html=True)
+
+            for rule in r_list:
                 rule_id = rule.get("rule_id", "—")
                 status = rule.get("status", "ACTIVE")
                 action = rule.get("action", "BLOCK")
@@ -1019,51 +1142,62 @@ with tab_rules:
                 </div>
                 """, unsafe_allow_html=True)
 
-                if status == "ACTIVE":
-                    if st.button(f"Deactivate {rule_id}", key=f"deact_{rule_id}", use_container_width=True):
-                        api("POST", f"/soc/rules/{rule_id}/deactivate")
-                        st.toast(f"Rule {rule_id} deactivated.", icon="⏹")
-                        st.rerun()
+                c_act1, c_act2, c_act3 = st.columns([1, 1, 1])
+                with c_act1:
+                    if status == "ACTIVE":
+                        if st.button(f"⏸ Deactivate", key=f"deact_{rule_id}", use_container_width=True):
+                            api("POST", f"/soc/rules/{rule_id}/deactivate")
+                            st.toast(f"Rule {rule_id} deactivated.", icon="⏹")
+                            st.rerun()
+                with c_act2:
+                    btn_edit_label = "✏️ Edit Rule"
+                    if st.button(btn_edit_label, key=f"btn_edit_trigger_{rule_id}", use_container_width=True):
+                        st.session_state[f"editing_rule_{rule_id}"] = not st.session_state.get(f"editing_rule_{rule_id}", False)
 
-    with col_code:
-        st.markdown("""
-        <div style="font-size:13px;font-weight:700;color:#e2e8f0;margin-bottom:8px;">
-          🔧 Code-Based Rules
-          <span style="font-size:10px;color:#64748b;font-weight:400;margin-left:8px;">Python evaluate(tx) rules from AI generation</span>
-        </div>
-        """, unsafe_allow_html=True)
+                with c_act3:
+                    if st.button(f"🗑️ Delete", key=f"del_{rule_id}", use_container_width=True):
+                        res, err = delete_soc_rule_api(rule_id)
+                        if err:
+                            st.toast(f"Delete failed: {err}", icon="❌")
+                        else:
+                            st.toast(f"Rule {rule_id} deleted!", icon="🗑️")
+                            st.rerun()
 
-        rules_data, rules_err = fetch_rules()
-        if rules_err:
-            st.error(f"Failed to load rules: {rules_err}")
-        elif not rules_data:
-            st.info("No code-based rules deployed. Use 'Generate rule' in the investigation panel.")
-        else:
-            st.markdown(f'<div style="font-size:11px;color:#64748b;margin-bottom:12px;">{len(rules_data)}/20 rules active</div>', unsafe_allow_html=True)
-            for rule in rules_data:
-                with st.container():
-                    r1, r2 = st.columns([4, 1])
-                    with r1:
-                        st.markdown(f"""
-                        <div style="font-size:13px;font-weight:600;color:#e2e8f0;">{rule.get("name","—")}</div>
-                        <div style="font-size:10px;color:#64748b;font-family:'JetBrains Mono',monospace;margin-top:2px;">{rule.get("id","")}</div>
-                        <div style="font-size:12px;color:#94a3b8;margin-top:4px;">{rule.get("description","")}</div>
-                        """, unsafe_allow_html=True)
-                    with r2:
-                        st.markdown(
-                            '<span style="background:rgba(34,197,94,0.15);color:#22c55e;'
-                            'border:1px solid rgba(34,197,94,0.3);border-radius:4px;'
-                            'padding:2px 8px;font-size:10px;font-weight:700;">ACTIVE</span>',
-                            unsafe_allow_html=True,
-                        )
-                    st.code(rule.get("code", ""), language="python")
-                    dep_ts = ""
-                    try:
-                        dep_ts = datetime.fromisoformat(str(rule.get("created_at", "")).replace("Z", "+00:00")).strftime("%Y-%m-%d %H:%M")
-                    except Exception:
-                        dep_ts = rule.get("created_at", "")
-                    st.markdown(f'<div style="font-size:10px;color:#64748b;margin-bottom:4px;">Deployed via: "{rule.get("created_by_command","")}" · {dep_ts}</div>', unsafe_allow_html=True)
-                    st.markdown('<div style="border-bottom:1px solid #1e2433;margin:8px 0;"></div>', unsafe_allow_html=True)
+                # Inline Edit Form when Edit Rule toggled
+                if st.session_state.get(f"editing_rule_{rule_id}", False):
+                    with st.expander(f"✏️ Edit Rule {rule_id}", expanded=True):
+                        with st.form(key=f"edit_form_{rule_id}"):
+                            edit_name = st.text_input("Rule Name", value=rule.get("rule_name", ""), key=f"ename_{rule_id}")
+                            edit_action = st.selectbox(
+                                "Enforcement Action",
+                                ["BLOCK", "CHALLENGE"],
+                                index=0 if action == "BLOCK" else 1,
+                                key=f"eaction_{rule_id}"
+                            )
+                            import json
+                            edit_cond_json = st.text_area(
+                                "Conditions (JSON format)",
+                                value=json.dumps(conditions, indent=2),
+                                key=f"econd_{rule_id}"
+                            )
+                            submitted = st.form_submit_button("💾 Save Changes", type="primary", use_container_width=True)
+                            if submitted:
+                                try:
+                                    parsed_conds = json.loads(edit_cond_json)
+                                    res, err = update_soc_rule_api(
+                                        rule_id=rule_id,
+                                        rule_name=edit_name.strip(),
+                                        action=edit_action,
+                                        conditions=parsed_conds,
+                                    )
+                                    if err:
+                                        st.error(f"Failed to update rule: {err}")
+                                    else:
+                                        st.toast(f"Rule {rule_id} updated successfully!", icon="✅")
+                                        st.session_state[f"editing_rule_{rule_id}"] = False
+                                        st.rerun()
+                                except json.JSONDecodeError as e:
+                                    st.error(f"Invalid JSON format for conditions: {e}")
 
 
 # ── Tab 2: SOC Audit Log Timeline ─────────────────────────────────────────────
@@ -1074,12 +1208,35 @@ with tab_soc_audit:
     soc_logs = soc_logs if isinstance(soc_logs, list) else []
     st.session_state.soc_audit_log = soc_logs
 
-    col_refresh_audit = st.columns([4, 1])
-    with col_refresh_audit[0]:
+    col_audit_title, col_audit_flt, col_audit_ref = st.columns([2, 2, 1])
+    with col_audit_title:
         st.markdown(f'<div style="font-size:13px;font-weight:700;color:#e2e8f0;">SOC Lifecycle Events <span style="font-size:11px;color:#64748b;font-weight:400;">({len(soc_logs)} entries)</span></div>', unsafe_allow_html=True)
-    with col_refresh_audit[1]:
+    with col_audit_flt:
+        audit_event_filter = st.selectbox(
+            "⚡ Filter Audit Log by Event:",
+            ["ALL EVENTS", "BLOCKED", "MATCHED", "ALERT", "CREATED", "ALLOWED", "CHALLENGED", "DEPLOYED"],
+            key="soc_audit_event_filter",
+        )
+    with col_audit_ref:
+        st.markdown("<div style='height:24px'></div>", unsafe_allow_html=True)
         if st.button("↻ Refresh Log", key="btn_refresh_soc_audit", use_container_width=True):
             st.rerun()
+
+    # Event filter map
+    event_map = {
+        "BLOCKED": ["TRANSACTION_BLOCKED"],
+        "MATCHED": ["RULE_MATCHED"],
+        "ALERT": ["ALERT_CREATED"],
+        "CREATED": ["TRANSACTION_CREATED"],
+        "ALLOWED": ["TRANSACTION_ALLOWED"],
+        "CHALLENGED": ["CHALLENGE_TRIGGERED"],
+        "DEPLOYED": ["RULE_DEPLOYED"],
+    }
+    if audit_event_filter != "ALL EVENTS":
+        target_events = event_map.get(audit_event_filter, [])
+        filtered_soc_logs = [e for e in soc_logs if e.get("event_type") in target_events]
+    else:
+        filtered_soc_logs = soc_logs
 
     if not soc_logs:
         st.markdown("""
@@ -1089,9 +1246,11 @@ with tab_soc_audit:
           <div style="font-size:11px;margin-top:6px;">Run a simulation to generate lifecycle events</div>
         </div>
         """, unsafe_allow_html=True)
+    elif not filtered_soc_logs:
+        st.info(f"No events matching filter `{audit_event_filter}`.")
     else:
         # Show as timeline feed
-        for entry in soc_logs[:100]:
+        for entry in filtered_soc_logs[:100]:
             ts = fmt_time(entry.get("timestamp", ""))
             tx_id = str(entry.get("transaction_id", ""))[:16]
             rule_id = entry.get("rule_id", "") or "—"
@@ -1126,84 +1285,6 @@ with tab_soc_audit:
               <span style="font-size:10px;color:#64748b;flex:1;text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="{reason}">{reason[:60]}{"…" if len(reason) > 60 else ""}</span>
             </div>
             """, unsafe_allow_html=True)
-
-
-# ── Tab 3: Code Rules Audit Trail ─────────────────────────────────────────────
-with tab_code_audit:
-    st.markdown('<div style="height:8px"></div>', unsafe_allow_html=True)
-    audit_data, audit_err = fetch_audit_log()
-    if audit_err:
-        st.error(f"Failed to load audit log: {audit_err}")
-    else:
-        integrity_valid = audit_data.get("integrity_valid", True)
-        tampered_id = audit_data.get("tampered_row_id")
-        entries = audit_data.get("entries", [])
-
-        if integrity_valid:
-            st.markdown("""
-            <div style="background:rgba(34,197,94,0.1);border:1px solid rgba(34,197,94,0.3);
-              border-radius:8px;padding:10px 14px;font-size:12px;color:#22c55e;margin-bottom:12px;">
-              ✓ <strong>SHA-256 Hash Chain Integrity Verified</strong> — Audit log entries are untampered.
-            </div>
-            """, unsafe_allow_html=True)
-        else:
-            st.markdown(f"""
-            <div style="background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.3);
-              border-radius:8px;padding:10px 14px;font-size:12px;color:#ef4444;margin-bottom:12px;">
-              ⚠️ <strong>Hash Chain Integrity Compromised!</strong> — Tampering detected at row #{tampered_id}
-            </div>
-            """, unsafe_allow_html=True)
-
-        if not entries:
-            st.info("No code-based rule audit entries yet.")
-        else:
-            import pandas as pd
-            df = pd.DataFrame([{
-                "#":         e.get("id"),
-                "Timestamp": e.get("timestamp", "")[:19].replace("T", " "),
-                "Rule ID":   e.get("rule_id", ""),
-                "Action":    e.get("status", ""),
-                "Command":   e.get("command", ""),
-                "SHA-256":   e.get("hash", "")[:16] + "…",
-            } for e in entries])
-            st.dataframe(df, use_container_width=True, hide_index=True,
-                column_config={
-                    "#":         st.column_config.NumberColumn(width="small"),
-                    "Timestamp": st.column_config.TextColumn(width="medium"),
-                    "Rule ID":   st.column_config.TextColumn(width="medium"),
-                    "Action":    st.column_config.TextColumn(width="small"),
-                    "Command":   st.column_config.TextColumn(width="large"),
-                    "SHA-256":   st.column_config.TextColumn(width="medium"),
-                })
-
-
-# ── Tab 4: Custom Profile Builder ─────────────────────────────────────────────
-with tab_custom:
-    st.markdown('<div style="height:8px"></div>', unsafe_allow_html=True)
-    st.markdown('<div style="font-size:12px;color:#64748b;margin-bottom:16px;">Define a transaction pattern for the simulator to generate.</div>', unsafe_allow_html=True)
-
-    with st.form("profile_builder_form", clear_on_submit=True):
-        p_name = st.text_input("Profile name *", placeholder="e.g. High-value foreign transactions", key="pf_name")
-        pc1, pc2 = st.columns(2)
-        with pc1:
-            p_min = st.number_input("Min amount (₹)", min_value=0, value=0, key="pf_min")
-        with pc2:
-            p_max = st.number_input("Max amount (₹)", min_value=0, value=999999, key="pf_max")
-        p_location = st.selectbox("Transaction location", options=["any", "new_device", "foreign_ip", "atm", "online"], key="pf_location")
-        p_rate = st.slider("Transactions per minute", min_value=1, max_value=30, value=5, key="pf_rate")
-        pf_submit = st.form_submit_button("✨ Create Profile", type="primary", use_container_width=True)
-
-    if pf_submit:
-        if not p_name.strip():
-            st.error("Profile name is required.")
-        else:
-            result, err = create_profile(p_name.strip(), {"amount_range": [float(p_min), float(p_max)], "location": None if p_location == "any" else p_location, "txn_per_minute": int(p_rate)})
-            if err:
-                st.error(f"Failed to create profile: {err}")
-            else:
-                st.session_state.active_profile = p_name.strip()
-                st.success(f"✓ Profile created: `{result.get('profile_id', 'unknown')}`")
-                st.info("The simulator will use this profile on next start.")
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

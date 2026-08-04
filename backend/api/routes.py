@@ -599,6 +599,9 @@ from backend.soc.rule_store import (
     deploy_soc_rule,
     get_all_soc_rules,
     deactivate_soc_rule,
+    delete_soc_rule,
+    delete_all_soc_rules,
+    update_soc_rule,
     extract_conditions_from_transaction,
     evaluate_transaction_against_soc_rules,
     increment_rule_hit,
@@ -613,6 +616,12 @@ class SOCRuleDeployRequest(BaseModel):
     conditions: Optional[Dict[str, Any]] = None
     action: str = "BLOCK"
     transaction_data: Optional[Dict[str, Any]] = None
+
+
+class SOCRuleUpdateRequest(BaseModel):
+    rule_name: Optional[str] = None
+    action: Optional[str] = None
+    conditions: Optional[Dict[str, Any]] = None
 
 
 @router.post("/soc/rules/deploy", tags=["SOC Prevention"])
@@ -665,6 +674,39 @@ def deactivate_soc_rule_endpoint(rule_id: str):
     return {"success": True, "rule_id": rule_id, "message": f"Rule {rule_id} deactivated."}
 
 
+@router.delete("/soc/rules/{rule_id}", tags=["SOC Prevention"])
+@router.post("/soc/rules/{rule_id}/delete", tags=["SOC Prevention"])
+def delete_soc_rule_endpoint(rule_id: str):
+    """Permanently delete a SOC prevention rule."""
+    ok = delete_soc_rule(rule_id)
+    if not ok:
+        raise HTTPException(status_code=404, detail=f"SOC rule '{rule_id}' not found.")
+    return {"success": True, "rule_id": rule_id, "message": f"Rule {rule_id} deleted."}
+
+
+@router.delete("/soc/rules", tags=["SOC Prevention"])
+@router.post("/soc/rules/delete-all", tags=["SOC Prevention"])
+def delete_all_soc_rules_endpoint():
+    """Permanently delete all SOC prevention rules."""
+    count = delete_all_soc_rules()
+    return {"success": True, "count": count, "message": f"Deleted {count} SOC rules."}
+
+
+@router.put("/soc/rules/{rule_id}", tags=["SOC Prevention"])
+@router.post("/soc/rules/{rule_id}/update", tags=["SOC Prevention"])
+def update_soc_rule_endpoint(rule_id: str, body: SOCRuleUpdateRequest):
+    """Update name, action, or conditions of a SOC prevention rule."""
+    updated = update_soc_rule(
+        rule_id=rule_id,
+        rule_name=body.rule_name,
+        action=body.action,
+        conditions=body.conditions,
+    )
+    if not updated:
+        raise HTTPException(status_code=404, detail=f"SOC rule '{rule_id}' not found.")
+    return {"success": True, "rule": updated, "message": f"Rule {rule_id} updated."}
+
+
 @router.get("/soc/audit-log", tags=["SOC Prevention"])
 def get_soc_audit_log(limit: int = 200):
     """Return recent SOC lifecycle audit events (newest first)."""
@@ -684,6 +726,8 @@ def simulate_with_enforcement(body: dict):
 
     enriched = []
     for tx in txs:
+        if not tx.get("profile_id"):
+            tx["profile_id"] = profile_id
         tx_id = tx.get("id", "")
         risk_score = float(tx.get("final_risk_score", 0.0))
         cls = tx.get("classification", "SAFE")
@@ -696,14 +740,14 @@ def simulate_with_enforcement(body: dict):
             risk_score=risk_score,
         )
 
-        # Log ALERT_CREATED for risky transactions
-        if cls in ("HIGH_RISK", "SUSPICIOUS"):
+        # Log ALERT_CREATED only for HIGH_RISK transactions
+        if cls == "HIGH_RISK":
             log_soc_event(
                 event_type="ALERT_CREATED",
                 transaction_id=tx_id,
                 action="ALERT_CREATED",
                 risk_score=risk_score,
-                reason=f"Transaction classified as {cls}",
+                reason=f"High risk transaction detected: {cls}",
             )
 
         # Evaluate SOC rules

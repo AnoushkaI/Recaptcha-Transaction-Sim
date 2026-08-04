@@ -27,20 +27,62 @@ from backend.core.db import get_db_connection, init_db, DEFAULT_DB_PATH
 
 
 def _next_rule_id(cursor) -> str:
-    """Auto-generate sequential SOC rule IDs: R-001, R-002, ..."""
-    cursor.execute("SELECT COUNT(*) FROM soc_rules")
-    count = cursor.fetchone()[0]
-    return f"R-{count + 1:03d}"
+    """Auto-generate sequential SOC rule IDs: R-001, R-002, ... safely avoiding UNIQUE constraint conflicts."""
+    cursor.execute("SELECT rule_id FROM soc_rules")
+    rows = cursor.fetchall()
+    max_num = 0
+    for r in rows:
+        rid = r[0] if isinstance(r, (tuple, list)) else r["rule_id"]
+        if rid and str(rid).startswith("R-"):
+            try:
+                num = int(str(rid).replace("R-", ""))
+                if num > max_num:
+                    max_num = num
+            except ValueError:
+                pass
+    return f"R-{max_num + 1:03d}"
 
 
-def _eval_conditions(conditions: Dict[str, Any], tx: Dict[str, Any]) -> bool:
-    """Evaluate ALL conditions against a transaction dict. Returns True if ALL match."""
+def _eval_conditions(
+    conditions: Dict[str, Any],
+    tx: Dict[str, Any],
+    rule_profile_id: Optional[str] = None,
+) -> bool:
+    """
+    Evaluate ALL conditions against a transaction dict.
+    Enforces strict profile scoping so rules belonging to one fraud profile
+    do not over-block transactions from other fraud profiles.
+    """
+    tx_profile = str(
+        tx.get("profile_id")
+        or tx.get("profile")
+        or tx.get("profile_name")
+        or ""
+    ).upper()
+
+    # 1. Strict Profile scoping from rule table column
+    if rule_profile_id and rule_profile_id.upper() not in ("UNKNOWN", "ALL", ""):
+        if tx_profile != rule_profile_id.upper():
+            return False
+
+    # 2. Check profile_id from conditions dict if present
+    if "profile_id" in conditions:
+        cond_prof = str(conditions["profile_id"]).upper()
+        if tx_profile != cond_prof:
+            return False
+
     for key, threshold in conditions.items():
-        if key == "amount_gt":
+        if key == "profile_id":
+            continue
+        elif key == "amount_gt":
             if float(tx.get("amount", 0)) <= float(threshold):
                 return False
         elif key == "amount_lt":
             if float(tx.get("amount", 0)) >= float(threshold):
+                return False
+        elif key == "merchant_category":
+            tx_cat = str(tx.get("merchant_category") or tx.get("category") or "")
+            if tx_cat.lower() != str(threshold).lower():
                 return False
         elif key == "vpn_prob_gt":
             if float(tx.get("vpn_probability", 0)) <= float(threshold):
@@ -48,12 +90,20 @@ def _eval_conditions(conditions: Dict[str, Any], tx: Dict[str, Any]) -> bool:
         elif key == "automation_score_gt":
             if float(tx.get("automation_probability", 0)) <= float(threshold):
                 return False
+        elif key == "known_device_lt":
+            if float(tx.get("known_device_probability", 1.0)) >= float(threshold):
+                return False
         elif key == "unknown_device":
             is_unknown = float(tx.get("known_device_probability", 1.0)) < 0.5
             if bool(threshold) != is_unknown:
                 return False
         elif key == "classification":
-            if str(tx.get("classification", "")).upper() != str(threshold).upper():
+            tx_cls = str(tx.get("classification", "")).upper()
+            target_cls = str(threshold).upper()
+            if target_cls in ("HIGH_RISK", "SUSPICIOUS"):
+                if tx_cls not in ("HIGH_RISK", "SUSPICIOUS"):
+                    return False
+            elif tx_cls != target_cls:
                 return False
         elif key == "location_in":
             if tx.get("location", "") not in list(threshold):
@@ -116,12 +166,13 @@ def evaluate_transaction_against_soc_rules(
     cursor = conn.cursor()
     try:
         cursor.execute(
-            "SELECT rule_id, rule_name, conditions_json, action FROM soc_rules WHERE status = 'ACTIVE' ORDER BY created_at ASC"
+            "SELECT rule_id, profile_id, rule_name, conditions_json, action FROM soc_rules WHERE status = 'ACTIVE' ORDER BY created_at ASC"
         )
         rows = cursor.fetchall()
         for row in rows:
             conditions = json.loads(row["conditions_json"])
-            if _eval_conditions(conditions, tx):
+            r_profile = row["profile_id"]
+            if _eval_conditions(conditions, tx, rule_profile_id=r_profile):
                 reason = f"{row['rule_name']} matched: " + ", ".join(
                     f"{k}={v}" for k, v in conditions.items()
                 )
@@ -183,45 +234,196 @@ def deactivate_soc_rule(rule_id: str, db_path: str = DEFAULT_DB_PATH) -> bool:
         conn.close()
 
 
+def delete_soc_rule(rule_id: str, db_path: str = DEFAULT_DB_PATH) -> bool:
+    """Permanently delete a SOC rule by ID. Returns True if deleted."""
+    conn = get_db_connection(db_path)
+    cursor = conn.cursor()
+    try:
+        cursor.execute("DELETE FROM soc_rules WHERE rule_id = ?", (rule_id,))
+        conn.commit()
+        return cursor.rowcount > 0
+    finally:
+        conn.close()
+
+
+def delete_all_soc_rules(db_path: str = DEFAULT_DB_PATH) -> int:
+    """Permanently delete all SOC rules. Returns count of deleted rules."""
+    conn = get_db_connection(db_path)
+    cursor = conn.cursor()
+    try:
+        cursor.execute("DELETE FROM soc_rules")
+        conn.commit()
+        return cursor.rowcount
+    finally:
+        conn.close()
+
+
+def update_soc_rule(
+    rule_id: str,
+    rule_name: Optional[str] = None,
+    action: Optional[str] = None,
+    conditions: Optional[Dict[str, Any]] = None,
+    db_path: str = DEFAULT_DB_PATH,
+) -> Optional[Dict[str, Any]]:
+    """Update name, action, and/or conditions of an existing SOC rule."""
+    conn = get_db_connection(db_path)
+    cursor = conn.cursor()
+    try:
+        cursor.execute("SELECT * FROM soc_rules WHERE rule_id = ?", (rule_id,))
+        row = cursor.fetchone()
+        if not row:
+            return None
+
+        new_name = rule_name if rule_name is not None else row["rule_name"]
+        new_action = action.upper() if action is not None else row["action"]
+        new_conditions_json = (
+            json.dumps(conditions) if conditions is not None else row["conditions_json"]
+        )
+
+        cursor.execute(
+            """
+            UPDATE soc_rules
+            SET rule_name = ?, action = ?, conditions_json = ?
+            WHERE rule_id = ?
+            """,
+            (new_name, new_action, new_conditions_json, rule_id),
+        )
+        conn.commit()
+
+        cursor.execute("SELECT * FROM soc_rules WHERE rule_id = ?", (rule_id,))
+        updated = cursor.fetchone()
+        return {
+            "rule_id": updated["rule_id"],
+            "profile_id": updated["profile_id"],
+            "rule_name": updated["rule_name"],
+            "conditions": json.loads(updated["conditions_json"]),
+            "action": updated["action"],
+            "status": updated["status"],
+            "created_at": updated["created_at"],
+            "hit_count": updated["hit_count"],
+        }
+    finally:
+        conn.close()
+
+
+def get_soc_rule_by_id(rule_id: str, db_path: str = DEFAULT_DB_PATH) -> Optional[Dict[str, Any]]:
+    """Retrieve a single SOC rule by ID."""
+    init_db(db_path)
+    conn = get_db_connection(db_path)
+    cursor = conn.cursor()
+    try:
+        cursor.execute("SELECT * FROM soc_rules WHERE rule_id = ?", (rule_id,))
+        r = cursor.fetchone()
+        if not r:
+            return None
+        return {
+            "rule_id": r["rule_id"],
+            "profile_id": r["profile_id"],
+            "rule_name": r["rule_name"],
+            "conditions": json.loads(r["conditions_json"]),
+            "action": r["action"],
+            "status": r["status"],
+            "created_at": r["created_at"],
+            "hit_count": r["hit_count"],
+        }
+    finally:
+        conn.close()
+
+
+def format_soc_rule_code(
+    rule_id: str,
+    rule_name: str,
+    profile_id: str,
+    conditions: Dict[str, Any],
+    action: str = "BLOCK",
+    description: str = "",
+) -> str:
+    """Format SOC rule conditions into standard syntax-highlighted Python code representation matching SOC specs."""
+    clean_name = rule_name.replace(" Prevention", "").strip()
+    header = (
+        f"# Prevent {clean_name}\n"
+        f"# Rule ID: {rule_id}\n"
+    )
+
+    cond_lines = []
+    if "profile_id" in conditions:
+        cond_lines.append(f'tx.profile_id == "{conditions["profile_id"]}"')
+    elif profile_id and profile_id.upper() not in ("UNKNOWN", "ALL", ""):
+        cond_lines.append(f'tx.profile_id == "{profile_id}"')
+
+    if "amount_lt" in conditions:
+        cond_lines.append(f"tx.amount < {float(conditions['amount_lt']):.1f}")
+    if "amount_gt" in conditions:
+        cond_lines.append(f"tx.amount >= {float(conditions['amount_gt']):.2f}")
+    if "merchant_category" in conditions:
+        cond_lines.append(f'tx.merchant_category == "{conditions["merchant_category"]}"')
+    if "vpn_prob_gt" in conditions:
+        cond_lines.append(f"tx.vpn_probability > {float(conditions['vpn_prob_gt']):.2f}")
+    if "automation_score_gt" in conditions:
+        cond_lines.append(f"tx.automation_probability > {float(conditions['automation_score_gt']):.2f}")
+    if "known_device_lt" in conditions:
+        cond_lines.append(f"tx.known_device_probability < {float(conditions['known_device_lt']):.2f}")
+    elif conditions.get("unknown_device"):
+        cond_lines.append("tx.known_device_probability < 0.30")
+    if conditions.get("tor_used"):
+        cond_lines.append("tx.tor_probability > 0.30")
+    if "classification" in conditions:
+        cls_val = str(conditions["classification"]).upper()
+        if cls_val in ("HIGH_RISK", "SUSPICIOUS"):
+            cond_lines.append('tx.classification in ("HIGH_RISK", "SUSPICIOUS")')
+        else:
+            cond_lines.append(f'tx.classification == "{cls_val}"')
+    if "location_in" in conditions:
+        cond_lines.append(f'tx.location in {conditions["location_in"]}')
+
+    if not cond_lines:
+        cond_lines.append("tx.final_risk_score >= 0.60")
+
+    indented_conds = "\n        and ".join(cond_lines)
+    func_code = f"def evaluate(tx):\n    return (\n        {indented_conds}\n    )\n\nACTION = \"{action.upper()}\""
+    return header + "\n" + func_code
+
+
 def extract_conditions_from_transaction(tx: Dict[str, Any]) -> Dict[str, Any]:
     """
-    Auto-extract meaningful conditions from a transaction dict for one-click rule deployment.
-    Produces the tightest reasonable rule based on the transaction's risk signals.
+    Auto-extract precise, tight multi-signal conditions from a transaction dict.
+    Ensures that only transactions specifically matching this exact risk pattern get blocked.
     """
     conditions: Dict[str, Any] = {}
 
-    # Amount threshold — block transactions above 80% of this amount
+    # 1. Profile ID scoping
+    prof_id = tx.get("profile_id") or tx.get("profile")
+    if prof_id and str(prof_id).upper() not in ("UNKNOWN", "ALL", ""):
+        conditions["profile_id"] = str(prof_id)
+
+    # 2. Precise Amount threshold (within 85% of target transaction amount)
     amount = float(tx.get("amount", 0))
-    if amount > 500:
-        conditions["amount_gt"] = round(amount * 0.7, 2)
+    if amount > 0:
+        if amount < 100.0:
+            conditions["amount_lt"] = round(amount * 1.15, 2)
+        else:
+            conditions["amount_gt"] = round(amount * 0.85, 2)
 
-    # VPN signal
+    # 3. Merchant Category
+    m_cat = tx.get("merchant_category") or tx.get("category")
+    if m_cat:
+        conditions["merchant_category"] = str(m_cat)
+
+    # 4. Telemetry Signals — only extract if transaction exhibits elevated risk (>0.50)
     vpn_prob = float(tx.get("vpn_probability", 0))
-    if vpn_prob > 0.5:
-        conditions["vpn_prob_gt"] = round(vpn_prob * 0.8, 2)
+    if vpn_prob >= 0.50:
+        conditions["vpn_prob_gt"] = round(vpn_prob * 0.85, 2)
 
-    # Automation signal
     auto_prob = float(tx.get("automation_probability", 0))
-    if auto_prob > 0.6:
-        conditions["automation_score_gt"] = round(auto_prob * 0.8, 2)
+    if auto_prob >= 0.50:
+        conditions["automation_score_gt"] = round(auto_prob * 0.85, 2)
 
-    # Unknown device
     known_dev = float(tx.get("known_device_probability", 1.0))
-    if known_dev < 0.5:
-        conditions["unknown_device"] = True
+    if known_dev <= 0.40:
+        conditions["known_device_lt"] = round(known_dev * 1.25, 2)
 
-    # TOR usage
     tor_prob = float(tx.get("tor_probability", 0))
-    if tor_prob > 0.3:
+    if tor_prob >= 0.35:
         conditions["tor_used"] = True
-
-    # Classification — always include for HIGH_RISK
-    cls = str(tx.get("classification", "")).upper()
-    if cls == "HIGH_RISK":
-        conditions["classification"] = "HIGH_RISK"
-
-    # Fallback — if nothing extracted, use amount-based rule
-    if not conditions:
-        conditions["amount_gt"] = max(100.0, amount * 0.5)
 
     return conditions

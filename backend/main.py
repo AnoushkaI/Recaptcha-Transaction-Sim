@@ -175,9 +175,8 @@ async def lifespan(app: FastAPI):
         })
         triggered_alerts = rules_engine.score_transaction(tx)
 
-        # If no active custom rule triggered on this transaction, record profile scenario transaction
-        # so live console displays scenario alerts continuously across High, Suspicious, and Safe categories
-        if not triggered_alerts:
+        # Record alert ONLY for HIGH_RISK transactions
+        if not triggered_alerts and (getattr(tx, "classification", "") == "HIGH_RISK" or (tx.final_risk_score or 0.0) >= 0.60):
             alert = FlaggedAlert(
                 id=f"alt_{uuid.uuid4().hex[:8]}",
                 transaction_id=tx.id,
