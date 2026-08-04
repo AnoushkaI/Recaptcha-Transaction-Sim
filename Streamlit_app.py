@@ -1033,12 +1033,8 @@ with right_col:
 
         # ── Quick action buttons ───────────────────────────────────────────────
         st.markdown("<div style='height:4px'></div>", unsafe_allow_html=True)
-        qa1, qa2, qa3, qa4 = st.columns(4)
         quick_cmds = [
-            (qa1, "Explain this", "Explain this alert"),
-            (qa2, "Generate rule", "Generate a rule to detect this pattern"),
-            (qa3, "Why flagged?", "Why was this flagged?"),
-            (qa4, "Flag similar", "Flag similar transactions in future"),
+            ("Generate rule", "Generate a rule to detect this pattern"),
         ]
 
         def _handle_send(cmd_text: str):
@@ -1081,11 +1077,10 @@ with right_col:
                         {"type": "explain", "text": result.get("explanation", "")}
                     )
 
-        for col, label, cmd in quick_cmds:
-            with col:
-                if st.button(label, key=f"qb_{label}", use_container_width=True):
-                    _handle_send(cmd)
-                    st.rerun()
+        for label, cmd in quick_cmds:
+            if st.button(label, key=f"qb_{label}", use_container_width=True):
+                _handle_send(cmd)
+                st.rerun()
 
         # ── Chat input ────────────────────────────────────────────────────────
         prompt = st.chat_input(
@@ -1198,58 +1193,7 @@ with st.expander("📜  Rules Engine & Audit Trail", expanded=False):
                     st.markdown('<div style="border-bottom:1px solid #1e2433;margin:8px 0;"></div>', unsafe_allow_html=True)
 
 
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# ─── CUSTOM PROFILE BUILDER EXPANDER ─────────────────────────────────────────
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-with st.expander("➕  Custom Simulator Profile", expanded=False):
-    st.markdown(
-        '<div style="font-size:12px;color:#64748b;margin-bottom:16px;">'
-        'Define a transaction pattern for the simulator to generate.</div>',
-        unsafe_allow_html=True,
-    )
 
-    with st.form("profile_builder_form", clear_on_submit=True):
-        p_name = st.text_input(
-            "Profile name *",
-            placeholder="e.g. High-value foreign transactions",
-            key="pf_name",
-        )
-
-        pc1, pc2 = st.columns(2)
-        with pc1:
-            p_min = st.number_input("Min amount (₹)", min_value=0, value=0, key="pf_min")
-        with pc2:
-            p_max = st.number_input("Max amount (₹)", min_value=0, value=999999, key="pf_max")
-
-        p_location = st.selectbox(
-            "Transaction location",
-            options=["any", "new_device", "foreign_ip", "atm", "online"],
-            key="pf_location",
-        )
-
-        p_rate = st.slider(
-            "Transactions per minute",
-            min_value=1, max_value=30, value=5, key="pf_rate",
-        )
-
-        pf_submit = st.form_submit_button("✨ Create Profile", type="primary", use_container_width=True)
-
-    if pf_submit:
-        if not p_name.strip():
-            st.error("Profile name is required.")
-        else:
-            rules_payload = {
-                "amount_range": [float(p_min), float(p_max)],
-                "location": None if p_location == "any" else p_location,
-                "txn_per_minute": int(p_rate),
-            }
-            result, err = create_profile(p_name.strip(), rules_payload)
-            if err:
-                st.error(f"Failed to create profile: {err}")
-            else:
-                st.session_state.active_profile = p_name.strip()
-                st.success(f"✓ Profile created: `{result.get('profile_id', 'unknown')}`")
-                st.info("The simulator will use this profile on next start.")
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
