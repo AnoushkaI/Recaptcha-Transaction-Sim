@@ -11,24 +11,24 @@ import logging
 import re
 from typing import Generator, Any, Optional, List
 from urllib.parse import urlparse, unquote
+from dotenv import load_dotenv
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, declarative_base
 
+load_dotenv()
+
 logger = logging.getLogger(__name__)
 
-DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/fraud_engine_db")
+DATABASE_URL = os.getenv("DATABASE_URL") or "postgresql://postgres:Shrutish%402006@localhost:5432/fraud_engine_db"
 DEFAULT_DB_PATH = DATABASE_URL
 
-# SQLAlchemy engine setup for ORM support
+# SQLAlchemy engine setup for PostgreSQL ORM support
 try:
-    if DATABASE_URL.startswith("sqlite"):
-        engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
-    else:
-        engine = create_engine(DATABASE_URL, pool_size=10, max_overflow=20)
+    engine = create_engine(DATABASE_URL, pool_size=10, max_overflow=20)
 except Exception as e:
     logger.error(f"Failed to initialize SQLAlchemy engine with {DATABASE_URL}: {e}")
-    engine = create_engine(f"sqlite:///fraud_rules.db", connect_args={"check_same_thread": False})
+    raise e
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()

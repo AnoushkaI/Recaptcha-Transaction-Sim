@@ -11,6 +11,9 @@ import time
 import requests
 import streamlit as st
 from datetime import datetime
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # ─── Config ───────────────────────────────────────────────────────────────────
 BASE_URL = "http://localhost:8000"
