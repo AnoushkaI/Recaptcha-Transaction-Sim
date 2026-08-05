@@ -31,6 +31,7 @@ class Settings(BaseSettings):
     OLLAMA_MODEL: str = os.getenv("OLLAMA_MODEL", "qwen2.5-coder:3b")
 
     # Fraud Engine Settings
+    DATABASE_URL: str = os.getenv("DATABASE_URL") or "postgresql://postgres:postgres@localhost:5432/fraud_engine_db"
     DATABASE_PATH: str = os.getenv("DATABASE_PATH", "fraud_rules.db")
     MAX_RULES_CAP: int = int(os.getenv("MAX_RULES_CAP", "20"))
     SIMILARITY_THRESHOLD: float = float(os.getenv("SIMILARITY_THRESHOLD", "0.85"))
@@ -38,9 +39,18 @@ class Settings(BaseSettings):
         "PROFILE_LIBRARY_PATH", "backend/profiles/profiles.json"
     )
 
-    # Server Settings
+    # Server & Security Settings
     HOST: str = os.getenv("HOST", "0.0.0.0")
     PORT: int = int(os.getenv("PORT", "8000"))
+    ALLOWED_ORIGINS: str = os.getenv(
+        "ALLOWED_ORIGINS",
+        "http://localhost:8501,http://localhost:3000,http://localhost:8000,http://127.0.0.1:8501,http://127.0.0.1:3000,http://127.0.0.1:8000"
+    )
+
+    @property
+    def allowed_origins_list(self) -> list:
+        return [origin.strip() for origin in self.ALLOWED_ORIGINS.split(",") if origin.strip()]
+
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
@@ -58,3 +68,5 @@ OLLAMA_HOST: str = settings.OLLAMA_HOST
 OLLAMA_BASE_URL: str = settings.OLLAMA_BASE_URL
 OLLAMA_MODEL: str = settings.OLLAMA_MODEL
 RULE_WRITER_MAX_RETRIES: int = settings.RULE_WRITER_MAX_RETRIES
+DATABASE_URL: str = settings.DATABASE_URL
+DATABASE_PATH: str = settings.DATABASE_PATH

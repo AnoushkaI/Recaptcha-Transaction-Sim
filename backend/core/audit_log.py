@@ -2,23 +2,30 @@
 Audit Logger (`core/audit_log.py`)
 
 Provides tamper-evident SHA-256 hash-chained logging of all rule deployments
-and reverts. Enforces insert-only audit persistence in SQLite.
+and reverts. Enforces insert-only audit persistence in PostgreSQL.
 """
 
 import hashlib
-import sqlite3
 import logging
 from datetime import datetime, timezone
 from typing import List, Optional, Tuple
 from backend.core.schemas import Rule, AuditLogEntry
 from backend.core.db import get_db_connection, init_db, DEFAULT_DB_PATH
 
-
-
-
 logger = logging.getLogger(__name__)
 
 GENESIS_HASH = "0" * 64
+
+
+def _to_str(value) -> str:
+    """Safely convert a value to string — handles datetime objects returned by PostgreSQL TIMESTAMPTZ."""
+    if value is None:
+        return ""
+    if isinstance(value, str):
+        return value
+    if hasattr(value, "isoformat"):
+        return value.isoformat()
+    return str(value)
 
 
 def compute_entry_hash(prev_hash: str, rule_id: str, timestamp: str, command: str, code: str, status: str) -> str:
@@ -32,7 +39,7 @@ class AuditLogger:
         self.db_path: str = db_path
         init_db(self.db_path)
 
-    def _get_latest_hash(self, cursor: sqlite3.Cursor) -> str:
+    def _get_latest_hash(self, cursor) -> str:
         """Fetch hash of most recent audit log entry or genesis hash if empty."""
         cursor.execute("SELECT hash FROM audit_log ORDER BY id DESC LIMIT 1")
         row = cursor.fetchone()
@@ -42,7 +49,7 @@ class AuditLogger:
 
     def log_deploy_rule(self, rule: Rule, command: str) -> AuditLogEntry:
         """
-        Logs rule deployment to audit_log with hash chaining and updates SQLite rules table.
+        Logs rule deployment to audit_log with SHA-256 hash chaining.
         """
         init_db(self.db_path)
         conn = get_db_connection(self.db_path)
@@ -61,40 +68,19 @@ class AuditLogger:
                 status=rule.status
             )
 
-            # 1. Insert into audit_log
+            # Insert into tamper-evident audit_log
             cursor.execute("""
             INSERT INTO audit_log (rule_id, timestamp, command, code, status, prev_hash, hash)
             VALUES (?, ?, ?, ?, ?, ?, ?)
             """, (rule.id, timestamp, command, rule.code, rule.status, prev_hash, entry_hash))
             entry_id = cursor.lastrowid
 
-            # 2. Upsert into rules table
-            cursor.execute("""
-            INSERT INTO rules (id, name, code, description, created_at, status, created_by_command)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-            ON CONFLICT(id) DO UPDATE SET
-                name=excluded.name,
-                code=excluded.code,
-                description=excluded.description,
-                status=excluded.status,
-                created_by_command=excluded.created_by_command
-            """, (rule.id, rule.name, rule.code, rule.description, rule.created_at, rule.status, rule.created_by_command))
-
-            # 3. Append to rule_history
-            cursor.execute("SELECT COUNT(*) as count FROM rule_history WHERE rule_id = ?", (rule.id,))
-            version = cursor.fetchone()["count"] + 1
-
-            cursor.execute("""
-            INSERT INTO rule_history (rule_id, version, code, status, created_at, command)
-            VALUES (?, ?, ?, ?, ?, ?)
-            """, (rule.id, version, rule.code, rule.status, timestamp, command))
-
             conn.commit()
 
             return AuditLogEntry(
                 id=entry_id,
                 rule_id=rule.id,
-                timestamp=timestamp,
+                timestamp=_to_str(timestamp),
                 command=command,
                 code=rule.code,
                 status=rule.status,
@@ -107,21 +93,22 @@ class AuditLogger:
 
     def log_revert_rule(self, rule_id: str, command: str) -> Optional[AuditLogEntry]:
         """
-        Logs a rule revert action, updates rule status in SQLite to 'reverted'.
+        Logs a rule revert action into audit_log.
+        Returns None if rule_id has no previous deployment log.
         """
         conn = get_db_connection(self.db_path)
         cursor = conn.cursor()
         timestamp = datetime.now(timezone.utc).isoformat()
 
         try:
-            cursor.execute("SELECT * FROM rules WHERE id = ?", (rule_id,))
+            cursor.execute("SELECT code FROM audit_log WHERE rule_id = ? ORDER BY id DESC LIMIT 1", (rule_id,))
             rule_row = cursor.fetchone()
             if not rule_row:
                 return None
 
+            code = rule_row["code"]
             prev_hash = self._get_latest_hash(cursor)
             reverted_status = "reverted"
-            code = rule_row["code"]
 
             entry_hash = compute_entry_hash(
                 prev_hash=prev_hash,
@@ -132,22 +119,19 @@ class AuditLogger:
                 status=reverted_status
             )
 
-            # 1. Insert into audit_log
+            # Insert revert record into audit_log
             cursor.execute("""
             INSERT INTO audit_log (rule_id, timestamp, command, code, status, prev_hash, hash)
             VALUES (?, ?, ?, ?, ?, ?, ?)
             """, (rule_id, timestamp, command, code, reverted_status, prev_hash, entry_hash))
             entry_id = cursor.lastrowid
 
-            # 2. Update status in rules table
-            cursor.execute("UPDATE rules SET status = 'reverted' WHERE id = ?", (rule_id,))
-
             conn.commit()
 
             return AuditLogEntry(
                 id=entry_id,
                 rule_id=rule_id,
-                timestamp=timestamp,
+                timestamp=_to_str(timestamp),
                 command=command,
                 code=code,
                 status=reverted_status,
@@ -175,7 +159,7 @@ class AuditLogger:
                 AuditLogEntry(
                     id=row["id"],
                     rule_id=row["rule_id"],
-                    timestamp=row["timestamp"],
+                    timestamp=_to_str(row["timestamp"]),
                     command=row["command"],
                     code=row["code"],
                     status=row["status"],
@@ -187,25 +171,34 @@ class AuditLogger:
             conn.close()
 
     def get_active_rules(self) -> List[Rule]:
-        """Fetch all currently active rules from SQLite."""
+        """Fetch all currently active rules derived from tamper-evident audit_log."""
         init_db(self.db_path)
         conn = get_db_connection(self.db_path)
         cursor = conn.cursor()
 
         try:
-            cursor.execute("SELECT * FROM rules WHERE status = 'active'")
+            cursor.execute("SELECT * FROM audit_log ORDER BY id ASC")
             rows = cursor.fetchall()
-            return [
-                Rule(
-                    id=row["id"],
-                    name=row["name"],
-                    code=row["code"],
-                    description=row["description"],
-                    created_at=row["created_at"],
-                    status=row["status"],
-                    created_by_command=row["created_by_command"]
-                ) for row in rows
-            ]
+
+            rules_by_id = {}
+            for row in rows:
+                r_id = row["rule_id"]
+                r_status = row["status"]
+                if r_status == "reverted":
+                    rules_by_id.pop(r_id, None)
+                elif r_status == "active":
+                    rules_by_id[r_id] = Rule(
+                        id=r_id,
+                        name=f"Rule {r_id}",
+                        code=row["code"],
+                        description=row["command"],
+                        created_at=_to_str(row["timestamp"]),
+                        status="active",
+                        created_by_command=row["command"]
+                    )
+            return list(rules_by_id.values())
+        except Exception:
+            return []
         finally:
             conn.close()
 
@@ -218,7 +211,6 @@ class AuditLogger:
         conn = get_db_connection(self.db_path)
         cursor = conn.cursor()
 
-
         try:
             cursor.execute("SELECT * FROM audit_log ORDER BY id ASC")
             rows = cursor.fetchall()
@@ -230,16 +222,14 @@ class AuditLogger:
                 actual_prev = row["prev_hash"]
                 actual_hash = row["hash"]
 
-                # 1. Check prev_hash link
                 if actual_prev != expected_prev_hash:
                     logger.error(f"Hash chain broken at row {row_id}: prev_hash mismatch!")
                     return False, row_id
 
-                # 2. Recompute hash
                 recomputed = compute_entry_hash(
                     prev_hash=actual_prev,
                     rule_id=row["rule_id"],
-                    timestamp=row["timestamp"],
+                    timestamp=_to_str(row["timestamp"]),
                     command=row["command"],
                     code=row["code"],
                     status=row["status"]

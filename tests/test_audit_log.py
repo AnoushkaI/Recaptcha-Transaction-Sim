@@ -32,7 +32,7 @@ def test_db_creates_all_tables(db):
     cursor = conn.cursor()
     cursor.execute("SELECT name FROM sqlite_master WHERE type='table';")
     tables = {row["name"] for row in cursor.fetchall()}
-    assert {"rules", "audit_log", "rule_history", "custom_profiles"}.issubset(tables)
+    assert {"audit_log", "soc_rules", "soc_audit_log"}.issubset(tables)
     conn.close()
 
 

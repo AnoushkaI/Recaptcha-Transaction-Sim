@@ -21,7 +21,7 @@ from backend.core.schemas import (
 def test_transaction_all_fields():
     tx = Transaction(
         id="tx_1001", account_id="acc_550", amount=1250.75,
-        location="US-CA", timestamp="2026-07-27T11:00:00Z",
+        location="DEL-BLR", timestamp="2026-07-27T11:00:00Z",
         account_age_days=10, merchant_category="electronics",
         device_id="dev_9910", is_international=False
     )
@@ -35,7 +35,7 @@ def test_transaction_default_is_international():
     """is_international defaults to False."""
     tx = Transaction(
         id="tx_def", account_id="acc_1", amount=100.0,
-        location="US-NY", timestamp="2026-07-27T10:00:00Z",
+        location="MUM-DEL", timestamp="2026-07-27T10:00:00Z",
         account_age_days=30, merchant_category="groceries",
         device_id="dev_1"
     )
@@ -70,7 +70,7 @@ def test_transaction_model_fields_set():
 def test_flagged_alert_full():
     tx = Transaction(
         id="tx_1002", account_id="acc_551", amount=5000.0,
-        location="RU-MOS", timestamp="2026-07-27T11:05:00Z",
+        location="MUM-JMT", timestamp="2026-07-27T11:05:00Z",
         account_age_days=2, merchant_category="crypto",
         device_id="dev_8812", is_international=True
     )
@@ -88,7 +88,7 @@ def test_flagged_alert_default_score():
     """score defaults to 1.0."""
     tx = Transaction(
         id="tx_score", account_id="acc_1", amount=100.0,
-        location="US-NY", timestamp="2026-07-27T10:00:00Z",
+        location="MUM-DEL", timestamp="2026-07-27T10:00:00Z",
         account_age_days=30, merchant_category="groceries", device_id="dev_1"
     )
     alert = FlaggedAlert(

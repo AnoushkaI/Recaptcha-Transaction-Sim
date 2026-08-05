@@ -9,7 +9,7 @@ from backend.core.schemas import Transaction, Rule, FlaggedAlert
 from backend.core.rules_engine import RulesEngine
 
 
-def make_tx(amount=500.0, location="US-NY", age=100, international=False):
+def make_tx(amount=500.0, location="MUM-DEL", age=100, international=False):
     return Transaction(
         id="tx_test_001",
         account_id="acc_001",
@@ -214,14 +214,14 @@ async def test_async_listener_receives_alert_via_event_loop():
 def test_hot_reload_mid_stream():
     """Deploy rule mid-run → next tx immediately scored against it."""
     engine = RulesEngine()
-    tx = make_tx(location="RU-MOS")
+    tx = make_tx(location="MUM-JMT")
 
     # Before hot-reload: no rules
     assert len(engine.score_transaction(tx)) == 0
 
     # Hot-reload new rule
     rule = make_rule("rule_hotreload")
-    engine.register_rule(rule, lambda tx: tx.location == "RU-MOS")
+    engine.register_rule(rule, lambda tx: tx.location == "MUM-JMT")
 
     # Next transaction immediately scored against it
     alerts = engine.score_transaction(tx)

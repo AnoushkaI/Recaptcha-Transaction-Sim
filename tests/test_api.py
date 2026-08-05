@@ -71,7 +71,7 @@ def test_deploy_valid_rule_second_unique():
     """Different enough rule to avoid duplicate detection."""
     res = client.post("/api/rules/deploy", json={
         "name": "Deploy Test B unique 2",
-        "code": "def evaluate(tx):\n    return tx.location == 'KP-PYO' and tx.merchant_category == 'wire_transfer'",
+        "code": "def evaluate(tx):\n    return tx.location == 'DEL-LKO' and tx.merchant_category == 'wire_transfer'",
         "description": "Flag KP wire transfers specifically",
         "command": "Deploy KP wire transfer check unique"
     })

@@ -133,7 +133,7 @@ def test_evaluate_transaction_dashboard_response_format():
         id="tx_test_99",
         account_id="acc_1001",
         amount=1500.0,
-        location="US-NY",
+        location="MUM-DEL",
         timestamp="2026-07-30T10:00:00Z",
         account_age_days=10,
         merchant_category="crypto",

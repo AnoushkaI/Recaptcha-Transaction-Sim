@@ -38,7 +38,7 @@ from backend.scoring.engine import evaluate_transaction, ScoringResult
 router = APIRouter()
 
 # Global singletons
-init_db(settings.DATABASE_PATH)
+init_db(settings.DATABASE_URL)
 validator = ASTSafetyValidator()
 rule_guard = RuleGuard(
     max_rules_cap=settings.MAX_RULES_CAP,
@@ -46,7 +46,7 @@ rule_guard = RuleGuard(
 )
 compiler = RuleCompiler()
 rules_engine = RulesEngine()
-audit_logger = AuditLogger(db_path=settings.DATABASE_PATH)
+audit_logger = AuditLogger(db_path=settings.DATABASE_URL)
 simulator = TransactionSimulator(interval_seconds=1.0)
 orchestrator = Orchestrator()
 
@@ -94,20 +94,9 @@ def map_flagged_alert_to_frontend(alert: FlaggedAlert) -> dict:
     elif cls == "SUSPICIOUS" or final_score >= 0.30:
         severity = "medium"
         score = final_score
-    elif cls == "SAFE" or final_score < 0.30:
+    else:
         severity = "low"
         score = final_score
-    else:
-        name = (alert.rule_name or "").lower()
-        if "high amount" in name or "wire" in name or "cross-border" in name:
-            severity = "high"
-            score = 0.90
-        elif "crypto" in name or "gaming" in name or "new account" in name or "electronics" in name:
-            severity = "medium"
-            score = 0.60
-        else:
-            severity = "low"
-            score = alert.score
 
     # Ensure transaction object includes realistic user names, titles, and descriptions
     if not tx_dict.get("user_name"):
@@ -119,7 +108,7 @@ def map_flagged_alert_to_frontend(alert: FlaggedAlert) -> dict:
 
     # Generate realistic, varied description if missing
     amt = tx_dict.get("amount", 0)
-    loc = tx_dict.get("location", "US-NY")
+    loc = tx_dict.get("location", "MUM-DEL")
     cat = (tx_dict.get("merchant_category") or "general").replace("_", " ")
     u_name = tx_dict["user_name"]
     acc_id = tx_dict.get("account_id", "acc_user")
@@ -423,9 +412,9 @@ async def explain_alert(
                 "user_name": "Devon Vance",
                 "account_id": "acc_8443",
                 "amount": 3543.0,
-                "location": "CN-BEI",
+                "location": "BLR-PAT",
                 "title": "High Amount Transaction Threshold",
-                "description": "High amount transaction performed by Devon Vance on account acc_8443 (CN-BEI)."
+                "description": "High amount transaction performed by Devon Vance on account acc_8443 (BLR-PAT)."
             }
         }
 

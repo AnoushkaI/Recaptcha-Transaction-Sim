@@ -22,12 +22,12 @@ logger = logging.getLogger("Benchmark")
 BENCHMARK_PROMPTS = [
     "Write a Python evaluate(tx) function to flag transactions over $1000 from accounts younger than 14 days.",
     "Write a Python evaluate(tx) function to flag international transactions over $2500 in merchant_category 'crypto'.",
-    "Write a Python evaluate(tx) function to flag transactions from location 'RU-MOS' where account_age_days < 7.",
+    "Write a Python evaluate(tx) function to flag transactions from location 'MUM-JMT' where account_age_days < 7.",
     "Write a Python evaluate(tx) function to flag transactions over $5000 on category 'electronics'.",
     "Write a Python evaluate(tx) function to flag transactions where is_international is True and amount > 500.",
     "Write a Python evaluate(tx) function to flag transactions where account_age_days < 3 and amount > 100.",
     "Write a Python evaluate(tx) function to flag transactions with merchant_category 'wire_transfer' over $3000.",
-    "Write a Python evaluate(tx) function to flag transactions from 'BR-SAO' with amount > 1500.",
+    "Write a Python evaluate(tx) function to flag transactions from 'DEL-NUH' with amount > 1500.",
     "Write a Python evaluate(tx) function to flag transactions with device_id matching dev_9999 and amount > 1000.",
     "Write a Python evaluate(tx) function to flag international transactions in 'luxury_goods' over $4000."
 ]

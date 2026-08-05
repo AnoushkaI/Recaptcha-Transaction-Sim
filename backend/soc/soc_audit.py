@@ -22,6 +22,17 @@ from typing import List, Dict, Any
 from backend.core.db import get_db_connection, init_db, DEFAULT_DB_PATH
 
 
+def _to_str(val: Any) -> str:
+    """Safely convert value to string — handles datetime objects from PostgreSQL TIMESTAMPTZ."""
+    if val is None:
+        return ""
+    if isinstance(val, str):
+        return val
+    if hasattr(val, "isoformat"):
+        return val.isoformat()
+    return str(val)
+
+
 def log_soc_event(
     event_type: str,
     transaction_id: str,
@@ -48,7 +59,7 @@ def log_soc_event(
         entry_id = cursor.lastrowid
         return {
             "id": entry_id,
-            "timestamp": timestamp,
+            "timestamp": _to_str(timestamp),
             "transaction_id": transaction_id,
             "rule_id": rule_id,
             "event_type": event_type,
@@ -73,7 +84,7 @@ def get_soc_audit_logs(limit: int = 200, db_path: str = DEFAULT_DB_PATH) -> List
         return [
             {
                 "id": r["id"],
-                "timestamp": r["timestamp"],
+                "timestamp": _to_str(r["timestamp"]),
                 "transaction_id": r["transaction_id"],
                 "rule_id": r["rule_id"],
                 "event_type": r["event_type"],
@@ -85,3 +96,4 @@ def get_soc_audit_logs(limit: int = 200, db_path: str = DEFAULT_DB_PATH) -> List
         ]
     finally:
         conn.close()
+

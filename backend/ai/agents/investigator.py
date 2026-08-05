@@ -135,7 +135,7 @@ def _build_dynamic_flags(txn: dict, alert: dict, user: str, acc: str, amt: float
     if ip_rep <= 0.5:
         flags.append(f"- **Untrusted IP Reputation**: Connection IP address rated {ip_rep:.2f} on global threat intelligence feeds.")
 
-    if loc in ["RU-MOS", "BR-SAO", "CN-BEI", "KP-PYO", "IR-THR"] or txn.get("is_international"):
+    if loc in ["MUM-JMT", "DEL-NUH", "BLR-PAT", "DEL-LKO", "HYD-RNC"] or txn.get("is_international"):
         flags.append(f"- **High-Risk Overseas Region**: Transaction originated from international location {loc}, outside typical customer regional bounds.")
 
     # 3. Account Profile & Value Flags
@@ -164,7 +164,7 @@ def generate_forensic_explanation(alert: dict) -> str:
     user = txn.get("user_name") or alert.get("user_name") or "Alex Morgan"
     acc = txn.get("account_id") or alert.get("account_id") or "acc_1001"
     amt = float(txn.get("amount") or alert.get("amount") or 0.0)
-    loc = str(txn.get("location") or alert.get("location") or "US-NY")
+    loc = str(txn.get("location") or alert.get("location") or "MUM-DEL")
     cls_name = str(txn.get("classification") or alert.get("classification") or "HIGH_RISK")
     f_risk = float(txn.get("final_risk_score") or alert.get("final_risk_score") or alert.get("score") or 0.75)
     rule = str(txn.get("title") or alert.get("rule_triggered") or alert.get("title") or "Unusual Activity Detected")

@@ -26,6 +26,30 @@ from typing import Dict, Any, List, Optional, Tuple
 from backend.core.db import get_db_connection, init_db, DEFAULT_DB_PATH
 
 
+def _parse_json(val: Any) -> Dict[str, Any]:
+    """Safely parse JSON data — handles dict/list objects returned directly by PostgreSQL JSONB."""
+    if isinstance(val, (dict, list)):
+        return val
+    if isinstance(val, str):
+        try:
+            return json.loads(val)
+        except Exception:
+            return {}
+    return {}
+
+
+def _to_str(val: Any) -> str:
+    """Safely convert value to string — handles datetime objects from PostgreSQL TIMESTAMPTZ."""
+    if val is None:
+        return ""
+    if isinstance(val, str):
+        return val
+    if hasattr(val, "isoformat"):
+        return val.isoformat()
+    return str(val)
+
+
+
 def _next_rule_id(cursor) -> str:
     """Auto-generate sequential SOC rule IDs: R-001, R-002, ... safely avoiding UNIQUE constraint conflicts."""
     cursor.execute("SELECT rule_id FROM soc_rules")
@@ -170,7 +194,7 @@ def evaluate_transaction_against_soc_rules(
         )
         rows = cursor.fetchall()
         for row in rows:
-            conditions = json.loads(row["conditions_json"])
+            conditions = _parse_json(row["conditions_json"])
             r_profile = row["profile_id"]
             if _eval_conditions(conditions, tx, rule_profile_id=r_profile):
                 reason = f"{row['rule_name']} matched: " + ", ".join(
@@ -208,10 +232,10 @@ def get_all_soc_rules(db_path: str = DEFAULT_DB_PATH) -> List[Dict[str, Any]]:
                 "rule_id": r["rule_id"],
                 "profile_id": r["profile_id"],
                 "rule_name": r["rule_name"],
-                "conditions": json.loads(r["conditions_json"]),
+                "conditions": _parse_json(r["conditions_json"]),
                 "action": r["action"],
                 "status": r["status"],
-                "created_at": r["created_at"],
+                "created_at": _to_str(r["created_at"]),
                 "hit_count": r["hit_count"],
             }
             for r in rows
@@ -296,10 +320,10 @@ def update_soc_rule(
             "rule_id": updated["rule_id"],
             "profile_id": updated["profile_id"],
             "rule_name": updated["rule_name"],
-            "conditions": json.loads(updated["conditions_json"]),
+            "conditions": _parse_json(updated["conditions_json"]),
             "action": updated["action"],
             "status": updated["status"],
-            "created_at": updated["created_at"],
+            "created_at": _to_str(updated["created_at"]),
             "hit_count": updated["hit_count"],
         }
     finally:
@@ -320,10 +344,10 @@ def get_soc_rule_by_id(rule_id: str, db_path: str = DEFAULT_DB_PATH) -> Optional
             "rule_id": r["rule_id"],
             "profile_id": r["profile_id"],
             "rule_name": r["rule_name"],
-            "conditions": json.loads(r["conditions_json"]),
+            "conditions": _parse_json(r["conditions_json"]),
             "action": r["action"],
             "status": r["status"],
-            "created_at": r["created_at"],
+            "created_at": _to_str(r["created_at"]),
             "hit_count": r["hit_count"],
         }
     finally:

@@ -73,28 +73,28 @@ PROFILE_SCENARIOS = {
             ("Gift Voucher Velocity Warning", "Increased gift card purchase frequency detected over a 24-hour window.")
         ],
         "SAFE": [
-            ("Single Retail Gift Card Purchase", "Single $25 retail gift card purchased from trusted home IP for a birthday gift."),
+            ("Single Retail Gift Card Purchase", "Single ₹25 retail gift card purchased from trusted home IP for a birthday gift."),
             ("Regular Store Credit Redemption", "Redemption of promotional store credit voucher on an established customer account."),
             ("Digital Book Store E-Coupon", "Small e-book voucher purchase of ₹{amount:,.0f} from verified domestic network."),
             ("Annual Gaming Pass Voucher", "Standard annual gaming pass code purchase on established user profile."),
-            ("App Store Micro Gift Code", "Small $10 app store credit top-up completed with 99% IP reputation score.")
+            ("App Store Micro Gift Code", "Small ₹10 app store credit top-up completed with 99% IP reputation score.")
         ],
         "categories": {"HIGH": ["gift_cards", "digital_goods"], "MEDIUM": ["gift_cards", "electronics"], "SAFE": ["gift_cards", "groceries"]}
     },
     "CARD_TESTING": {
         "HIGH": [
-            ("Automated BIN Micro-Test Storm", "Automated script executed rapid $1.00 micro-transactions across multiple merchant BINs to test card validity."),
-            ("Gas Station Card Testing Surge", "High frequency $2.50 gas station authorizations attempted via proxy network to check stolen card numbers."),
+            ("Automated BIN Micro-Test Storm", "Automated script executed rapid ₹1.00 micro-transactions across multiple merchant BINs to test card validity."),
+            ("Gas Station Card Testing Surge", "High frequency ₹2.50 gas station authorizations attempted via proxy network to check stolen card numbers."),
             ("Cross-Border Micro-Charge Attack", "Low-value cross-border micro-charges of ₹{amount:,.0f} executed in {loc} to verify active credit card status."),
-            ("High Velocity Gaming Micro-Transactions", "Dozens of gaming micro-payments under $5 placed in under 3 minutes using automated software."),
+            ("High Velocity Gaming Micro-Transactions", "Dozens of gaming micro-payments under ₹5 placed in under 3 minutes using automated software."),
             ("Bot Script Form Invalidation Test", "Bot script tested credit card numbers with zero mouse movements and instant form submission."),
             ("High Risk Proxy Card Testing", "Low-value digital authorization of ₹{amount:,.0f} initiated from a blacklisted proxy IP subnet."),
             ("Sequential Expiry Date Testing", "Sequential micro-charges executed rapidly to test CVV and expiration date combinations.")
         ],
         "MEDIUM": [
-            ("Gas Station Micro-Authorization", "Unusual $1.50 gas station micro-authorization attempted on a newly opened account."),
-            ("First-Time Small Gaming Charge", "First-time $3.00 gaming micro-transaction placed from an unrecognised device."),
-            ("Cross-Border Micro-Charge", "Small $4.00 international merchant charge detected on an unverified card."),
+            ("Gas Station Micro-Authorization", "Unusual ₹1.50 gas station micro-authorization attempted on a newly opened account."),
+            ("First-Time Small Gaming Charge", "First-time ₹3.00 gaming micro-transaction placed from an unrecognised device."),
+            ("Cross-Border Micro-Charge", "Small ₹4.00 international merchant charge detected on an unverified card."),
             ("Velocity Micro-Transaction Spike", "Three small micro-transactions attempted within 5 minutes of account login."),
             ("Low Amount Digital Goods Test", "Low amount software test transaction of ₹{amount:,.0f} placed while connected to a VPN."),
             ("New Merchant Category Micro-Charge", "First-time micro-charge detected at an online utility merchant."),
@@ -316,9 +316,9 @@ PROFILE_SCENARIOS = {
 }
 
 LOCATIONS_MAP = {
-    "HIGH": ["RU-MOS", "BR-SAO", "CN-BEI", "KP-PYO", "IR-THR"],
-    "MEDIUM": ["FR-PAR", "JP-TYO", "GB-LON", "US-NY", "DE-BER"],
-    "SAFE": ["US-NY", "US-CA", "US-TX", "GB-LON", "FR-PAR"]
+    "HIGH": ["MUM-JMT", "DEL-NUH", "BLR-PAT", "DEL-LKO", "HYD-RNC"],
+    "MEDIUM": ["BLR-COK", "MUM-NAG", "BLR-AMD", "MUM-DEL", "DEL-JAI"],
+    "SAFE": ["MUM-DEL", "DEL-BLR", "BLR-HYD", "BLR-AMD", "BLR-COK"]
 }
 
 

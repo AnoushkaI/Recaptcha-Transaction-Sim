@@ -12,18 +12,18 @@ def test_compile_rule_code():
     compiler = RuleCompiler()
     code = """
 def evaluate(tx):
-    return tx.amount > 500.0 and tx.location == 'US-NY'
+    return tx.amount > 500.0 and tx.location == 'MUM-DEL'
 """
     func = compiler.compile_rule_code(code)
     assert callable(func)
 
     tx_match = Transaction(
-        id="tx_1", account_id="acc_1", amount=750.0, location="US-NY",
+        id="tx_1", account_id="acc_1", amount=750.0, location="MUM-DEL",
         timestamp="2026-07-27T12:00:00Z", account_age_days=100,
         merchant_category="groceries", device_id="dev_1", is_international=False
     )
     tx_no_match = Transaction(
-        id="tx_2", account_id="acc_2", amount=250.0, location="US-NY",
+        id="tx_2", account_id="acc_2", amount=250.0, location="MUM-DEL",
         timestamp="2026-07-27T12:00:00Z", account_age_days=100,
         merchant_category="groceries", device_id="dev_2", is_international=False
     )
@@ -50,7 +50,7 @@ def test_compile_and_register_hot_reload():
     assert "rule_compiler_test" in engine.get_active_rule_ids()
 
     tx = Transaction(
-        id="tx_new", account_id="acc_new", amount=50.0, location="US-CA",
+        id="tx_new", account_id="acc_new", amount=50.0, location="DEL-BLR",
         timestamp="2026-07-27T12:00:00Z", account_age_days=2,
         merchant_category="retail", device_id="dev_new", is_international=False
     )

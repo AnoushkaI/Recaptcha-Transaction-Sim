@@ -19,7 +19,7 @@ class Transaction(BaseModel):
     id: str = Field(..., description="Unique transaction ID e.g. tx_102030")
     account_id: str = Field(..., description="Account identifier e.g. acc_9910")
     amount: float = Field(..., description="Transaction amount in USD")
-    location: str = Field(..., description="Location code or country code e.g. US-NY, RU-MOS")
+    location: str = Field(..., description="Location code or country code e.g. MUM-DEL, MUM-JMT")
     timestamp: str = Field(..., description="ISO 8601 timestamp of transaction")
     account_age_days: int = Field(..., description="Age of account in days")
     merchant_category: str = Field(..., description="Category e.g. electronics, crypto, retail, travel")
@@ -63,7 +63,7 @@ class Transaction(BaseModel):
                 "id": "tx_88301",
                 "account_id": "acc_4412",
                 "amount": 2450.00,
-                "location": "RU-MOS",
+                "location": "MUM-JMT",
                 "timestamp": "2026-07-27T12:00:00Z",
                 "account_age_days": 5,
                 "merchant_category": "crypto",

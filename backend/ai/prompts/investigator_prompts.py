@@ -27,7 +27,7 @@ def build_investigator_user_prompt(alert: dict) -> str:
     title = txn.get("title") or alert.get("title") or alert.get("rule_triggered") or "Fraud Detection Alert"
     description = txn.get("description") or alert.get("description") or "Suspicious transaction detected."
     amount = float(txn.get("amount") or alert.get("amount") or 0.0)
-    location = txn.get("location") or alert.get("location") or "US-NY"
+    location = txn.get("location") or alert.get("location") or "MUM-DEL"
     final_risk = float(txn.get("final_risk_score") or alert.get("final_risk_score") or alert.get("score") or 0.75)
     classification = txn.get("classification") or alert.get("classification") or "HIGH_RISK"
     merchant_category = txn.get("merchant_category") or "general"

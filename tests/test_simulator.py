@@ -141,7 +141,7 @@ def test_custom_profile_high_risk():
         assert tx.amount <= 10000.0
         assert tx.account_age_days <= 10
         assert tx.merchant_category == "crypto"
-        assert tx.location in ["RU-MOS", "BR-SAO", "CN-BEI", "KP-PYO", "IR-THR"]
+        assert tx.location in ["MUM-JMT", "DEL-NUH", "BLR-PAT", "DEL-LKO", "HYD-RNC"]
 
 
 def test_amount_min_greater_than_max_is_swapped():

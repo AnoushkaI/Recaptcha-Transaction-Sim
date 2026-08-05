@@ -80,84 +80,13 @@ async def lifespan(app: FastAPI):
     ).load_or_generate()
     logger.info("Validated profile library ready: %d profiles", len(profile_library.profiles))
 
-    # 1. Initialize SQLite Database
-    init_db(settings.DATABASE_PATH)
+    # 1. Initialize Database (PostgreSQL via DATABASE_URL, or SQLite fallback)
+    init_db(settings.DATABASE_URL)
 
     # 2. Load & compile active startup rules
     active_rules = audit_logger.get_active_rules()
     if not active_rules:
-        logger.info("No active rules found in database. Seeding default initial rules...")
-        from datetime import datetime, timezone
-        now = datetime.now(timezone.utc).isoformat()
-        from backend.core.schemas import Rule
-        default_rules = [
-            Rule(
-                id="rule_high_amount",
-                name="High Amount Transaction Threshold",
-                code="def evaluate(tx):\n    return tx.amount > 2000.0",
-                description="Flag transactions exceeding $2,000 threshold",
-                created_at=now,
-                status="active",
-                created_by_command="Default initial rule"
-            ),
-            Rule(
-                id="rule_intl_wire",
-                name="International Wire Transfer Risk",
-                code="def evaluate(tx):\n    return tx.is_international and tx.merchant_category == 'wire_transfer'",
-                description="Flag cross-border wire transfer operations",
-                created_at=now,
-                status="active",
-                created_by_command="Default initial rule"
-            ),
-            Rule(
-                id="rule_new_account",
-                name="New Account High Value Activity",
-                code="def evaluate(tx):\n    return tx.account_age_days < 7 and tx.amount > 500.0",
-                description="Flag high-value transactions on accounts newer than 7 days",
-                created_at=now,
-                status="active",
-                created_by_command="Default initial rule"
-            ),
-            Rule(
-                id="rule_crypto_gaming",
-                name="Crypto & Gaming Merchant Anomaly",
-                code="def evaluate(tx):\n    return tx.merchant_category in ['crypto', 'gaming']",
-                description="Flag high-risk merchant category transactions",
-                created_at=now,
-                status="active",
-                created_by_command="Default initial rule"
-            ),
-            Rule(
-                id="rule_micro_test",
-                name="Low Value Micro-Transaction Test",
-                code="def evaluate(tx):\n    return tx.amount < 15.0 and tx.is_international",
-                description="Flag low-value cross-border testing attempts",
-                created_at=now,
-                status="active",
-                created_by_command="Default initial rule"
-            ),
-            Rule(
-                id="rule_electronics_spike",
-                name="Electronics E-Commerce Spike",
-                code="def evaluate(tx):\n    return tx.merchant_category == 'electronics' and tx.amount > 800.0",
-                description="Flag large electronics purchases",
-                created_at=now,
-                status="active",
-                created_by_command="Default initial rule"
-            ),
-            Rule(
-                id="rule_gas_station_test",
-                name="Gas Station Card Testing",
-                code="def evaluate(tx):\n    return tx.merchant_category == 'gas_station' and tx.amount < 25.0",
-                description="Flag small gas station testing transactions",
-                created_at=now,
-                status="active",
-                created_by_command="Default initial rule"
-            )
-        ]
-        for r in default_rules:
-            audit_logger.log_deploy_rule(r, command="Default initial rule")
-        active_rules = audit_logger.get_active_rules()
+        logger.info("No active rules found in database.")
 
     logger.info(f"Loaded {len(active_rules)} active rules from database.")
     for rule in active_rules:
@@ -221,7 +150,7 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=settings.allowed_origins_list,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

@@ -39,7 +39,7 @@ function CodeDiffView({ code, filename = 'rule.py' }) {
 function TxnChips({ txn }) {
   if (!txn) return null;
   const chips = [
-    ['₹' + Number(txn.amount).toLocaleString('en-IN')],
+    ['₹' + Number(txn.amount).toLocaleString('en-US')],
     [txn.location],
     [txn.account_id],
   ];
@@ -95,7 +95,7 @@ export default function ChatPanel({ alert, onRuleDeployed }) {
     try {
       if (isGenerate) {
         const result = await generateRule(text, alert.id);
-        const ruleId = `rule_${Date.now()}`;
+        const ruleId = `rule_₹{Date.now()}`;
         setPendingRule({ code: result.code, ruleId, valid: result.valid, attempts: result.attempts, command: text });
         setMessages(m => [...m, {
           type: 'rule',
@@ -121,13 +121,13 @@ export default function ChatPanel({ alert, onRuleDeployed }) {
   async function handleApprove(ruleId, msgCode = null, msgCommand = null) {
     try {
       const ruleData = {
-        name: `Rule for Alert ${alert.id}`,
+        name: `Rule for Alert ₹{alert.id}`,
         code: msgCode || pendingRule?.code || '',
-        description: `Fraud detection rule generated via prompt: ${msgCommand || pendingRule?.command || 'analyst command'}`,
+        description: `Fraud detection rule generated via prompt: ₹{msgCommand || pendingRule?.command || 'analyst command'}`,
         command: msgCommand || pendingRule?.command || 'analyst command',
       };
       await approveRule(ruleId, ruleData);
-      setMessages(m => [...m, { type: 'system', text: `Rule ${ruleId} deployed successfully.` }]);
+      setMessages(m => [...m, { type: 'system', text: `Rule ₹{ruleId} deployed successfully.` }]);
       setPendingRule(null);
       onRuleDeployed?.();
     } catch (err) {
@@ -194,14 +194,14 @@ export default function ChatPanel({ alert, onRuleDeployed }) {
               {msg.valid && (
                 <div className="rule-actions">
                   <button
-                    id={`btn-deploy-${msg.ruleId}`}
+                    id={`btn-deploy-₹{msg.ruleId}`}
                     className="btn btn-success"
                     onClick={() => handleApprove(msg.ruleId, msg.code, msg.command)}
                   >
                     ✓ Deploy rule
                   </button>
                   <button
-                    id={`btn-reject-${msg.ruleId}`}
+                    id={`btn-reject-₹{msg.ruleId}`}
                     className="btn btn-ghost"
                     onClick={handleReject}
                   >

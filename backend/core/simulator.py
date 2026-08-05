@@ -25,13 +25,12 @@ class SimulatorState(str, Enum):
     PAUSED = "paused"
 
 
-# Real-world realistic defaults for generation
 LOCATIONS = [
-    "US-NY", "US-CA", "US-TX", "GB-LON", "DE-BER",
-    "FR-PAR", "JP-TYO", "RU-MOS", "BR-SAO", "CN-BEI"
+    "MUM-DEL", "DEL-BLR", "BLR-HYD", "HYD-MAA", "MAA-CCU",
+    "CCU-PNQ", "MUM-PNQ", "BLR-AMD", "DEL-JAI", "MUM-JMT"
 ]
 
-HIGH_RISK_LOCATIONS = ["RU-MOS", "BR-SAO", "CN-BEI", "KP-PYO", "IR-THR"]
+HIGH_RISK_LOCATIONS = ["MUM-JMT", "DEL-NUH", "BLR-PAT", "DEL-LKO", "HYD-RNC"]
 
 MERCHANT_CATEGORIES = [
     "groceries", "gas_station", "electronics", "crypto",
@@ -186,7 +185,7 @@ class TransactionSimulator:
             refund_attempts = int(sample_range(trx.get("refund_attempts"), 0, 1))
 
             location = random.choice(LOCATIONS)
-            is_international = location not in ["US-NY", "US-CA", "US-TX"]
+            is_international = location not in ["MUM-DEL", "DEL-BLR", "BLR-HYD", "HYD-MAA", "MAA-CCU", "CCU-PNQ", "MUM-PNQ"]
         else:
             # Custom Profile / Default Fallback Generation
             if random.random() < self.profile.new_account_bias:
@@ -206,7 +205,7 @@ class TransactionSimulator:
                 mouse_movement_quality = round(random.uniform(0.1, 0.4), 4)
             else:
                 location = random.choice(LOCATIONS)
-                is_international = location not in ["US-NY", "US-CA", "US-TX"]
+                is_international = location not in ["MUM-DEL", "DEL-BLR", "BLR-HYD", "HYD-MAA", "MAA-CCU", "CCU-PNQ", "MUM-PNQ"]
                 vpn_prob = round(random.uniform(0.01, 0.1), 4)
                 tor_prob = round(random.uniform(0.0, 0.02), 4)
                 automation_prob = round(random.uniform(0.01, 0.15), 4)

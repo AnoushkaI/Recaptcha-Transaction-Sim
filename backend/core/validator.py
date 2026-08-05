@@ -194,17 +194,17 @@ class ASTSafetyValidator:
         # Create test sample transactions
         samples: List[Transaction] = [
             Transaction(
-                id="tx_dry_1", account_id="acc_1", amount=100.0, location="US-NY",
+                id="tx_dry_1", account_id="acc_1", amount=100.0, location="MUM-DEL",
                 timestamp="2026-07-27T12:00:00Z", account_age_days=30,
                 merchant_category="groceries", device_id="dev_1", is_international=False
             ),
             Transaction(
-                id="tx_dry_2", account_id="acc_2", amount=5000.0, location="RU-MOS",
+                id="tx_dry_2", account_id="acc_2", amount=5000.0, location="MUM-JMT",
                 timestamp="2026-07-27T12:00:00Z", account_age_days=2,
                 merchant_category="crypto", device_id="dev_2", is_international=True
             ),
             Transaction(
-                id="tx_dry_3", account_id="acc_3", amount=0.0, location="JP-TYO",
+                id="tx_dry_3", account_id="acc_3", amount=0.0, location="MUM-NAG",
                 timestamp="2026-07-27T12:00:00Z", account_age_days=500,
                 merchant_category="electronics", device_id="dev_3", is_international=True
             ),
