@@ -2,6 +2,11 @@
 backend/ai/orchestrator.py
 ───────────────────────────
 LangGraph-based Orchestrator — pure routing, async node execution.
+
+AI Provider Fallback Chain (for rule generation and investigation):
+  1. Gemini  → success → return result
+  2. Ollama  → success → return result
+  3. Both fail → return AI_UNAVAILABLE (valid=False)
 """
 
 from __future__ import annotations
@@ -18,6 +23,14 @@ from backend.ai.providers.factory import get_provider
 
 COMMAND_EXPLAIN = "explain_alert"
 COMMAND_GENERATE = "generate_rule"
+
+_AI_UNAVAILABLE_RESULT = {
+    "valid": False,
+    "error": "AI_UNAVAILABLE",
+    "source": "none",
+    "code": "",
+    "explanation": "AI is unavailable. Both Gemini and local Ollama failed.",
+}
 
 
 class OrchestratorState(TypedDict):
@@ -53,57 +66,81 @@ def route_after_classify(
 
 
 async def run_investigator(state: OrchestratorState) -> OrchestratorState:
-    """Node 2a: Async call InvestigatorAgent, get forensic explanation."""
+    """Node 2a: Try Gemini → Ollama → AI_UNAVAILABLE for forensic explanation."""
     ctx = state["context"] or {}
+
+    # --- Attempt 1: Gemini ---
     try:
         provider = get_provider(role="investigator")
         agent = InvestigatorAgent(provider=provider)
         result = await agent.explain(ctx)
         return {**state, "result": result, "error": None}
     except Exception:
-        from backend.ai.agents.investigator import generate_forensic_explanation
-        result = generate_forensic_explanation(ctx)
+        pass
+
+    # --- Attempt 2: Ollama ---
+    try:
+        from backend.ai.providers.local_provider import LocalOllamaProvider
+        ollama_provider = LocalOllamaProvider()
+        agent = InvestigatorAgent(provider=ollama_provider)
+        result = await agent.explain(ctx)
         return {**state, "result": result, "error": None}
+    except Exception:
+        pass
+
+    # --- Both failed ---
+    return {
+        **state,
+        "result": _AI_UNAVAILABLE_RESULT["explanation"],
+        "error": "AI_UNAVAILABLE",
+    }
+
+
+async def _try_rule_writer(provider, cmd: str, ctx: dict, timeout: float) -> dict:
+    """Helper: run RuleWriterAgent with a given provider under a timeout."""
+    agent = RuleWriterAgent(provider=provider)
+    return await asyncio.wait_for(
+        agent.generate_rule(command=cmd, context=ctx),
+        timeout=timeout,
+    )
 
 
 async def run_rule_writer(state: OrchestratorState) -> OrchestratorState:
-    """Node 2b: Async call RuleWriterAgent, get Python rule code with 4s timeout protection."""
+    """Node 2b: Try Gemini → Ollama → AI_UNAVAILABLE for Python rule generation."""
     cmd = state["command"]
     ctx = state["context"] or {}
+
+    # --- Attempt 1: Gemini ---
     try:
-        provider = get_provider(role="rule_writer")
-        agent = RuleWriterAgent(provider=provider)
-        result = await asyncio.wait_for(
-            agent.generate_rule(command=cmd, context=ctx),
-            timeout=4.0
-        )
+        gemini_provider = get_provider(role="rule_writer")
+        result = await _try_rule_writer(gemini_provider, cmd, ctx, timeout=4.0)
         if result and result.get("valid"):
             code_val = result.get("code", "")
             if isinstance(code_val, dict):
                 result["explanation"] = code_val.get("explanation") or result.get("explanation")
                 result["code"] = code_val.get("code", "")
+            result["source"] = "gemini"
             return {**state, "result": result, "error": None}
-        from backend.ai.agents.rule_writer import generate_fallback_rule
-        fb = generate_fallback_rule(cmd, ctx)
-        code_str = fb.get("code", "") if isinstance(fb, dict) else str(fb)
-        expl_str = fb.get("explanation") if isinstance(fb, dict) else None
-        return {
-            **state,
-            "result": {"code": code_str, "explanation": expl_str, "valid": True, "error": None, "ruleId": "rule_auto_gen"},
-            "error": None
-        }
     except Exception:
-        from backend.ai.agents.rule_writer import generate_fallback_rule
-        fb = generate_fallback_rule(cmd, ctx)
-        code_str = fb.get("code", "") if isinstance(fb, dict) else str(fb)
-        expl_str = fb.get("explanation") if isinstance(fb, dict) else None
-        return {
-            **state,
-            "result": {"code": code_str, "explanation": expl_str, "valid": True, "error": None, "ruleId": "rule_auto_gen"},
-            "error": None
-        }
+        pass
 
+    # --- Attempt 2: Ollama ---
+    try:
+        from backend.ai.providers.local_provider import LocalOllamaProvider
+        ollama_provider = LocalOllamaProvider()
+        result = await _try_rule_writer(ollama_provider, cmd, ctx, timeout=60.0)
+        if result and result.get("valid"):
+            code_val = result.get("code", "")
+            if isinstance(code_val, dict):
+                result["explanation"] = code_val.get("explanation") or result.get("explanation")
+                result["code"] = code_val.get("code", "")
+            result["source"] = "ollama"
+            return {**state, "result": result, "error": None}
+    except Exception:
+        pass
 
+    # --- Both failed ---
+    return {**state, "result": _AI_UNAVAILABLE_RESULT, "error": "AI_UNAVAILABLE"}
 
 
 def _build_graph() -> Any:

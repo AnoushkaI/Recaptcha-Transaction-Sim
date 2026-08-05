@@ -4,7 +4,7 @@ Main FastAPI Server & WebSocket Streamer (`backend/main.py`)
 Entry point for the Fraud Detection Rule Engine & AI Security Dashboard.
 Provides real-time alert streaming over WebSockets (/ws/alerts and /alerts/stream).
 """
-
+import uuid
 import asyncio
 import json
 import logging

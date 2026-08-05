@@ -458,6 +458,15 @@ async def generate_rule_endpoint(body: GenerateRuleRequest) -> GenerateRuleRespo
         agent_output = result.get("result") if isinstance(result, dict) else None
 
         if isinstance(agent_output, dict):
+            # If the orchestrator already propagated an AI_UNAVAILABLE result, pass it through.
+            if agent_output.get("error") == "AI_UNAVAILABLE":
+                return GenerateRuleResponse(
+                    code="",
+                    explanation="AI is unavailable. Both Gemini and local Ollama failed.",
+                    valid=False,
+                    error="AI_UNAVAILABLE",
+                )
+
             code_val = agent_output.get("code", "")
             expl_val = agent_output.get("explanation")
             if isinstance(code_val, dict):
@@ -479,22 +488,19 @@ async def generate_rule_endpoint(body: GenerateRuleRequest) -> GenerateRuleRespo
                 error=None,
             )
 
-        from backend.ai.agents.rule_writer import generate_fallback_rule
-        fb = generate_fallback_rule(body.command, context)
+        # No output from either provider.
         return GenerateRuleResponse(
-            code=fb.get("code", "") if isinstance(fb, dict) else str(fb),
-            explanation=fb.get("explanation") if isinstance(fb, dict) else None,
-            valid=True,
-            error=None,
+            code="",
+            explanation="AI is unavailable. Both Gemini and local Ollama failed.",
+            valid=False,
+            error="AI_UNAVAILABLE",
         )
-    except Exception as exc:
-        from backend.ai.agents.rule_writer import generate_fallback_rule
-        fb = generate_fallback_rule(body.command, context)
+    except Exception:
         return GenerateRuleResponse(
-            code=fb.get("code", "") if isinstance(fb, dict) else str(fb),
-            explanation=fb.get("explanation") if isinstance(fb, dict) else None,
-            valid=True,
-            error=None,
+            code="",
+            explanation="AI is unavailable. Both Gemini and local Ollama failed.",
+            valid=False,
+            error="AI_UNAVAILABLE",
         )
 
 
