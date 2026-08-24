@@ -841,6 +841,7 @@ with right_col:
                 elif mtype == "error":
                     st.markdown(f'<div class="msg-error">{msg["text"]}</div>', unsafe_allow_html=True)
 
+<<<<<<< HEAD
         # ── SOC WORKFLOW STATES (State 1: Investigate, State 2: Generated, State 3: Already Active) ──
         from backend.soc.rule_store import (
             extract_conditions_from_transaction,
@@ -848,6 +849,13 @@ with right_col:
             format_soc_rule_code,
             get_soc_rule_by_id,
         )
+=======
+        # ── Quick action buttons ───────────────────────────────────────────────
+        st.markdown("<div style='height:4px'></div>", unsafe_allow_html=True)
+        quick_cmds = [
+            ("Generate rule", "Generate a rule to detect this pattern"),
+        ]
+>>>>>>> 7d9660191445cc0b24f73833785c937bb67bfc19
 
         txn_data = dict(txn if txn else selected)
         if not txn_data.get("profile_id"):
@@ -886,6 +894,7 @@ with right_col:
             </div>
             """, unsafe_allow_html=True)
 
+<<<<<<< HEAD
             act_c1, act_c2, act_c3 = st.columns([1, 1, 1])
             with act_c1:
                 if st.button("📜 Audit Log", key=f"btn_view_audit_{sel_tx_id}", use_container_width=True):
@@ -901,6 +910,18 @@ with right_col:
                 if st.button("✕ Close", key=f"btn_close_panel_{sel_tx_id}", use_container_width=True):
                     st.session_state.selected_alert = None
                     st.rerun()
+=======
+                    st.session_state.chat_messages.append({"type": "error", "text": err})
+                else:
+                    st.session_state.chat_messages.append(
+                        {"type": "explain", "text": result.get("explanation", "")}
+                    )
+
+        for label, cmd in quick_cmds:
+            if st.button(label, key=f"qb_{label}", use_container_width=True):
+                _handle_send(cmd)
+                st.rerun()
+>>>>>>> 7d9660191445cc0b24f73833785c937bb67bfc19
 
         # ── STATE 2: RULE GENERATED (Review & Deploy UI) ──────────────────────
         elif rule_draft:
@@ -1054,6 +1075,7 @@ tab_rules, tab_soc_audit = st.tabs([
 ])
 
 
+<<<<<<< HEAD
 # ── Tab 1: Active Prevention Rules Dashboard ──────────────────────────────────
 with tab_rules:
     st.markdown('<div style="height:8px"></div>', unsafe_allow_html=True)
@@ -1288,6 +1310,7 @@ with tab_soc_audit:
               <span style="font-size:10px;color:#64748b;flex:1;text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="{reason}">{reason[:60]}{"…" if len(reason) > 60 else ""}</span>
             </div>
             """, unsafe_allow_html=True)
+
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
